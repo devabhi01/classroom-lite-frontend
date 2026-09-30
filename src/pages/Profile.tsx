@@ -7,8 +7,7 @@ import {
   Calendar,
   GraduationCap,
   Presentation,
-  CheckCircle2,
-  ArrowRightLeft,
+  ShieldCheck,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -16,7 +15,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { useAuth } from '@/hooks/useAuth';
 
 export const Profile: React.FC = () => {
-  const { user, updateRole, logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const isTeacher = user?.role === 'TEACHER' || user?.role === 'HOST';
@@ -41,7 +40,7 @@ export const Profile: React.FC = () => {
           <CardTitle className="text-2xl font-bold tracking-tight">{user?.name || 'Classroom User'}</CardTitle>
           <CardDescription className="text-sm text-muted-foreground">{user?.email}</CardDescription>
 
-          {/* Prominent Role Badge */}
+          {/* Prominent Permanent Role Badge */}
           <div className="mt-3 flex items-center justify-center">
             {isTeacher ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20 shadow-xs">
@@ -93,6 +92,7 @@ export const Profile: React.FC = () => {
                 <p className="text-sm font-semibold text-foreground">
                   {isTeacher ? 'Teacher / Host' : 'Student / Learner'}
                 </p>
+                <p className="text-[10px] text-muted-foreground">Permanent (Set at signup)</p>
               </div>
             </div>
 
@@ -103,66 +103,21 @@ export const Profile: React.FC = () => {
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">Session</p>
                 <p className="text-sm font-medium text-foreground">Active</p>
+                <p className="text-[10px] text-muted-foreground">Authenticated via JWT</p>
               </div>
             </div>
           </div>
 
-          {/* Role Switcher Section */}
-          <div className="rounded-xl border border-border/80 bg-card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <ArrowRightLeft className="h-4 w-4 text-primary" />
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Switch Account Role
-                </h4>
-              </div>
-              <span className="text-[11px] text-muted-foreground">Click to toggle your active role</span>
+          {/* Account Role Policy Info Note */}
+          <div className="rounded-xl border border-border/80 bg-muted/20 p-4 flex items-start space-x-3">
+            <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+              <ShieldCheck className="h-4 w-4" />
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {/* Student Option */}
-              <button
-                type="button"
-                onClick={() => updateRole('STUDENT')}
-                className={`relative flex flex-col items-start p-3 rounded-lg border text-left transition-all cursor-pointer ${
-                  !isTeacher
-                    ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500 shadow-xs'
-                    : 'border-border/80 hover:bg-muted/50 text-muted-foreground'
-                }`}
-              >
-                <div className="flex items-center justify-between w-full mb-1">
-                  <div className="flex items-center space-x-1.5 font-semibold text-xs text-foreground">
-                    <GraduationCap className="h-4 w-4 text-emerald-600" />
-                    <span>Student</span>
-                  </div>
-                  {!isTeacher && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-tight">
-                  Join classrooms, follow live presentations, whiteboard & chat.
-                </p>
-              </button>
-
-              {/* Teacher Option */}
-              <button
-                type="button"
-                onClick={() => updateRole('TEACHER')}
-                className={`relative flex flex-col items-start p-3 rounded-lg border text-left transition-all cursor-pointer ${
-                  isTeacher
-                    ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
-                    : 'border-border/80 hover:bg-muted/50 text-muted-foreground'
-                }`}
-              >
-                <div className="flex items-center justify-between w-full mb-1">
-                  <div className="flex items-center space-x-1.5 font-semibold text-xs text-foreground">
-                    <Presentation className="h-4 w-4 text-primary" />
-                    <span>Teacher</span>
-                  </div>
-                  {isTeacher && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                </div>
-                <p className="text-[11px] text-muted-foreground leading-tight">
-                  Create classrooms, share PDF slides, screen share, and manage participants.
-                </p>
-              </button>
+            <div className="space-y-1">
+              <h4 className="text-xs font-semibold text-foreground">Account Role Policy</h4>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Your role is permanently assigned as <strong className="text-foreground">{isTeacher ? 'Teacher (Host)' : 'Student (Learner)'}</strong> based on your selection during signup. For classroom security and permission integrity, account roles cannot be changed.
+              </p>
             </div>
           </div>
         </CardContent>

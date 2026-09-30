@@ -4,7 +4,7 @@ import { Socket } from 'socket.io-client';
 import api from '@/lib/api';
 import { connectSocket, disconnectSocket } from '@/lib/socket';
 import { toast } from '@/components/ui/Toast';
-import { Classroom, WorkspaceTab } from '@/types/classroom';
+import { Classroom, WorkspaceTab, TimeLimitInfo } from '@/types/classroom';
 import { Participant, JoinRequest } from '@/types/participant';
 import { PdfState } from '@/types/pdf';
 import { WhiteboardOperation } from '@/types/whiteboard';
@@ -28,8 +28,27 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 2-hour session limit and 5-min advance warning states
+  const [timeLimit, setTimeLimit] = useState<TimeLimitInfo | null>(null);
+  const [timeWarning, setTimeWarning] = useState<string | null>(null);
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number | null>(null);
+
   const socketRef = useRef<Socket | null>(null);
   const isHost = classroom?.hostId === currentUser?.id;
+
+  // Active countdown timer when 5-min warning is active or remaining seconds known
+  useEffect(() => {
+    if (timeRemainingSeconds === null || timeRemainingSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setTimeRemainingSeconds((prev) => {
+        if (prev === null || prev <= 1) {
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [timeRemainingSeconds !== null && timeRemainingSeconds > 0]);
 
   // 1. Fetch classroom details via REST API
   const fetchClassroom = useCallback(async () => {
@@ -269,6 +288,18 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
       if (state.whiteboard && Array.isArray(state.whiteboard)) {
         setInitialWhiteboard(state.whiteboard);
       }
+      if (state.timeLimit) {
+        setTimeLimit(state.timeLimit);
+        if (typeof state.timeLimit.remainingSeconds === 'number') {
+          setTimeRemainingSeconds(state.timeLimit.remainingSeconds);
+        }
+        if (state.timeLimit.isWarning) {
+          setTimeWarning(
+            state.timeLimit.warningMessage ||
+              'Classroom exceeding time limit, Please create another after it ended.',
+          );
+        }
+      }
     };
 
     // Participants updates
@@ -316,13 +347,48 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
       toast.info(`Join request from ${joinReq.name}`, 'New Student Request');
     };
 
+    // Time Limit Warning (5 mins before 2-hour completion)
+    const handleTimeLimitWarning = (data: any) => {
+      const remaining = data?.remainingSeconds ?? 300;
+      const msg =
+        data?.message || 'Classroom exceeding time limit, Please create another after it ended.';
+      setTimeRemainingSeconds(remaining);
+      setTimeWarning(msg);
+      toast.warning(msg, 'Classroom Time Limit Warning');
+    };
+
     // Classroom Ended
-    const handleClassroomEnded = () => {
-      toast.warning('The host has ended this classroom session.', 'Classroom Ended');
+    const handleClassroomEnded = (payload?: any) => {
+      const reason = payload?.reason;
+      let msg = 'The host has ended this classroom session.';
+      if (reason === 'TIME_LIMIT_EXCEEDED') {
+        msg =
+          payload?.message ||
+          'Classroom exceeding time limit, Please create another after it ended.';
+      } else if (reason === 'INACTIVITY') {
+        msg =
+          payload?.message ||
+          'Classroom was automatically closed due to 5 minutes of inactivity or 0 active participants.';
+      } else if (payload?.message) {
+        msg = payload.message;
+      }
+      toast.warning(msg, 'Classroom Ended');
       setClassroom((prev) => (prev ? { ...prev, status: 'ENDED' } : null));
+      try {
+        const stored = localStorage.getItem('tdp_recent_classrooms');
+        if (stored) {
+          const list = JSON.parse(stored);
+          if (Array.isArray(list)) {
+            const updated = list.map((r: any) =>
+              r.code === classroomCode ? { ...r, status: 'ENDED' } : r,
+            );
+            localStorage.setItem('tdp_recent_classrooms', JSON.stringify(updated));
+          }
+        }
+      } catch {}
       setTimeout(() => {
         navigate('/dashboard');
-      }, 2500);
+      }, 3000);
     };
 
     // Tab Change synchronization
@@ -361,6 +427,7 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     s.on('classroom:user-left', handleUserLeft);
     s.on('classroom:participant-updated', handleParticipantUpdated);
     s.on('classroom:request:new', handleNewRequest);
+    s.on('classroom:time-limit-warning', handleTimeLimitWarning);
     s.on('classroom:ended', handleClassroomEnded);
     s.on('classroom:tab-change', handleTabChange);
     s.on('pdf:shared', handlePdfShared);
@@ -386,6 +453,7 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
         s.off('classroom:user-left', handleUserLeft);
         s.off('classroom:participant-updated', handleParticipantUpdated);
         s.off('classroom:request:new', handleNewRequest);
+        s.off('classroom:time-limit-warning', handleTimeLimitWarning);
         s.off('classroom:ended', handleClassroomEnded);
         s.off('classroom:tab-change', handleTabChange);
         s.off('pdf:shared', handlePdfShared);
@@ -474,6 +542,18 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
       if (socket && socket.connected) {
         socket.emit('classroom:ended', { classroomCode });
       }
+      try {
+        const stored = localStorage.getItem('tdp_recent_classrooms');
+        if (stored) {
+          const list = JSON.parse(stored);
+          if (Array.isArray(list)) {
+            const updated = list.map((r: any) =>
+              r.code === classroomCode ? { ...r, status: 'ENDED' } : r,
+            );
+            localStorage.setItem('tdp_recent_classrooms', JSON.stringify(updated));
+          }
+        }
+      } catch {}
       disconnectSocket();
       toast.info('Classroom ended successfully');
       navigate('/dashboard');
@@ -502,6 +582,9 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     initialWhiteboard,
     loading,
     error,
+    timeLimit,
+    timeWarning,
+    timeRemainingSeconds,
     switchTab,
     acceptJoinRequest,
     rejectJoinRequest,

@@ -9,11 +9,14 @@ import { Button } from '@/components/ui/Button';
 import { Home } from '@/pages/Home';
 import { Login } from '@/pages/Login';
 import { Signup } from '@/pages/Signup';
+import { VerifyEmail } from '@/pages/VerifyEmail';
 import { Dashboard } from '@/pages/Dashboard';
 import { CreateClassroom } from '@/pages/CreateClassroom';
 import { JoinClassroom } from '@/pages/JoinClassroom';
 import { Classroom } from '@/pages/Classroom';
 import { Profile } from '@/pages/Profile';
+import { RecentClassrooms } from '@/pages/RecentClassrooms';
+import { Analytics } from '@/pages/Analytics';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -120,6 +123,14 @@ export const AppRoutes: React.FC = () => {
           </PublicOnlyRoute>
         }
       />
+      <Route
+        path="/verify-email"
+        element={
+          <Layout>
+            <VerifyEmail />
+          </Layout>
+        }
+      />
 
       {/* Protected Routes */}
       <Route
@@ -158,6 +169,26 @@ export const AppRoutes: React.FC = () => {
           <ProtectedRoute>
             <Layout>
               <Profile />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/recent-classrooms"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <RecentClassrooms />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Analytics />
             </Layout>
           </ProtectedRoute>
         }

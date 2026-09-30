@@ -52,20 +52,6 @@ export const CreateClassroom: React.FC = () => {
         // Ignore cache storage error
       }
     } catch (err: any) {
-      const isServerOffline = err.message?.toLowerCase().includes('connect') || err.message?.toLowerCase().includes('server');
-      if (isServerOffline) {
-        // Fallback: create classroom in local demo mode so user can test the UI immediately
-        const fallbackRoom: Classroom = {
-          id: 'demo_' + Date.now(),
-          name: name.trim(),
-          code: 'TDP' + Math.random().toString(36).substring(2, 5).toUpperCase(),
-          hostId: 'demo_host_101',
-          status: 'ACTIVE',
-        };
-        setCreatedRoom(fallbackRoom);
-        toast.info('Backend server is offline. Classroom created in Standalone Demo Mode.');
-        return;
-      }
       setError(err.message || 'Failed to create classroom. Please try again.');
       toast.error(err.message || 'Failed to create classroom');
     } finally {

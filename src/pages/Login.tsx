@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { LogIn, Sparkles, UserCheck, GraduationCap, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
@@ -8,7 +8,7 @@ import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/hooks/useAuth';
 
 export const Login: React.FC = () => {
-  const { login, loginAsDemo } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectPath = searchParams.get('redirect') || '/dashboard';
@@ -17,6 +17,8 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [requiresVerification, setRequiresVerification] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
 
   const validate = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
@@ -44,25 +46,19 @@ export const Login: React.FC = () => {
     try {
       setIsLoading(true);
       setErrors({});
+      setRequiresVerification(false);
       await login({ email, password });
       navigate(redirectPath);
     } catch (err: any) {
+      if (err.requiresVerification || (err.message && err.message.toLowerCase().includes('verify your email'))) {
+        setRequiresVerification(true);
+        setUnverifiedEmail(err.email || email);
+      }
       setErrors({ general: err.message || 'Invalid email or password' });
     } finally {
       setIsLoading(false);
     }
   };
-
-  const handleDemoLogin = (role: 'HOST' | 'STUDENT') => {
-    loginAsDemo(role);
-    navigate(redirectPath);
-  };
-
-  const isServerOffline = errors.general && (
-    errors.general.toLowerCase().includes('connect') ||
-    errors.general.toLowerCase().includes('server') ||
-    errors.general.toLowerCase().includes('network')
-  );
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
@@ -87,23 +83,19 @@ export const Login: React.FC = () => {
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-semibold block">{errors.general}</span>
-                      {isServerOffline && (
-                        <p className="mt-1 text-muted-foreground">
-                          Your NestJS backend server might not be running on <code className="font-mono bg-muted px-1 py-0.5 rounded">http://localhost:3000</code>. You can start the NestJS server, or explore all frontend features right now using Demo Mode below!
-                        </p>
-                      )}
                     </div>
                   </div>
-                  {isServerOffline && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => handleDemoLogin('HOST')}
-                      className="w-full mt-1 bg-primary text-primary-foreground text-xs"
-                    >
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                      Continue in Demo Mode (No backend needed)
-                    </Button>
+                  {requiresVerification && (
+                    <div className="pt-1.5 border-t border-destructive/20 flex items-center justify-between">
+                      <span className="text-[11px] text-destructive/90">Haven&apos;t confirmed yet?</span>
+                      <Link
+                        to={`/verify-email?email=${encodeURIComponent(unverifiedEmail || email)}`}
+                        className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded transition-colors"
+                      >
+                        <Mail className="h-3 w-3" />
+                        <span>Verify Email Now &rarr;</span>
+                      </Link>
+                    </div>
                   )}
                 </div>
               )}
@@ -136,38 +128,6 @@ export const Login: React.FC = () => {
                 <LogIn className="mr-2 h-4 w-4" />
                 Sign In
               </Button>
-
-              <div className="relative w-full text-center my-1">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">or try demo mode</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 w-full">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDemoLogin('HOST')}
-                  className="text-xs"
-                >
-                  <UserCheck className="mr-1.5 h-3.5 w-3.5 text-primary" />
-                  Demo Host
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDemoLogin('STUDENT')}
-                  className="text-xs"
-                >
-                  <GraduationCap className="mr-1.5 h-3.5 w-3.5 text-blue-500" />
-                  Demo Student
-                </Button>
-              </div>
 
               <div className="text-center text-xs text-muted-foreground pt-1">
                 Don&apos;t have an account?{' '}

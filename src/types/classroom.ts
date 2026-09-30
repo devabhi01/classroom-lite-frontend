@@ -18,6 +18,14 @@ export interface CreateClassroomDto {
 
 export type WorkspaceTab = 'pdf' | 'whiteboard' | 'screenshare';
 
+export interface TimeLimitInfo {
+  maxDurationSeconds: number;
+  elapsedSeconds: number;
+  remainingSeconds: number;
+  isWarning: boolean;
+  warningMessage: string;
+}
+
 export interface ClassroomFullState {
   classroom: Classroom;
   participants: Participant[];
@@ -29,4 +37,6 @@ export interface ClassroomFullState {
     isSharing: boolean;
     streamHostId?: string;
   };
+  timeLimit?: TimeLimitInfo;
 }
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { UserPlus, GraduationCap, UserCheck } from 'lucide-react';
+import { UserPlus, GraduationCap, UserCheck, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
@@ -15,6 +15,7 @@ export const Signup: React.FC = () => {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState<'STUDENT' | 'TEACHER'>('STUDENT');
@@ -68,8 +69,20 @@ export const Signup: React.FC = () => {
     try {
       setIsLoading(true);
       setErrors({});
-      await signup({ name: name.trim(), email: email.trim(), password, role });
-      navigate(redirectPath);
+      const result: any = await signup({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        role,
+        phone: phone.trim() || undefined,
+      });
+      if (result && result.requiresVerification) {
+        const params = new URLSearchParams({ email: email.trim() });
+        if (phone.trim()) params.append('phone', phone.trim());
+        navigate(`/verify-email?${params.toString()}`);
+      } else {
+        navigate(redirectPath);
+      }
     } catch (err: any) {
       setErrors({ general: err.message || 'Failed to create account. Please try again.' });
     } finally {
@@ -134,6 +147,10 @@ export const Signup: React.FC = () => {
                     ? 'Students can join and participate in classrooms using a classroom code.'
                     : 'Teachers can create, host, and moderate classroom sessions.'}
                 </p>
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 px-2.5 py-1.5 rounded-md border border-amber-500/20">
+                  <Lock className="h-3.5 w-3.5 shrink-0" />
+                  <span>Important: Your role is permanent and cannot be changed after registration.</span>
+                </div>
               </div>
 
               <Input
@@ -156,6 +173,15 @@ export const Signup: React.FC = () => {
                 error={errors.email}
                 autoComplete="email"
                 required
+              />
+
+              <Input
+                label="Phone Number (Optional for SMS OTP)"
+                type="tel"
+                placeholder="+91 98765 43210"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoComplete="tel"
               />
 
               <Input
