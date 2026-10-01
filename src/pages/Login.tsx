@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { LogIn, Sparkles, UserCheck, GraduationCap, AlertCircle } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
@@ -8,7 +8,7 @@ import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/hooks/useAuth';
 
 export const Login: React.FC = () => {
-  const { login, loginAsDemo } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectPath = searchParams.get('redirect') || '/dashboard';
@@ -53,11 +53,6 @@ export const Login: React.FC = () => {
     }
   };
 
-  const handleDemoLogin = (role: 'HOST' | 'STUDENT') => {
-    loginAsDemo(role);
-    navigate(redirectPath);
-  };
-
   const isServerOffline = errors.general && (
     errors.general.toLowerCase().includes('connect') ||
     errors.general.toLowerCase().includes('server') ||
@@ -82,29 +77,26 @@ export const Login: React.FC = () => {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               {errors.general && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-semibold block">{errors.general}</span>
+                      {errors.general.toLowerCase().includes('verif') && (
+                        <Link
+                          to={`/verify-email?email=${encodeURIComponent(email)}`}
+                          className="mt-1.5 inline-block font-semibold text-primary underline"
+                        >
+                          Click here to enter your 6-digit verification code &rarr;
+                        </Link>
+                      )}
                       {isServerOffline && (
                         <p className="mt-1 text-muted-foreground">
-                          Your NestJS backend server might not be running on <code className="font-mono bg-muted px-1 py-0.5 rounded">http://localhost:3000</code>. You can start the NestJS server, or explore all frontend features right now using Demo Mode below!
+                          Cannot connect to the server at <code className="font-mono bg-muted px-1 py-0.5 rounded">http://localhost:3000</code>. Please ensure the backend is running.
                         </p>
                       )}
                     </div>
                   </div>
-                  {isServerOffline && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => handleDemoLogin('HOST')}
-                      className="w-full mt-1 bg-primary text-primary-foreground text-xs"
-                    >
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                      Continue in Demo Mode (No backend needed)
-                    </Button>
-                  )}
                 </div>
               )}
 
@@ -136,38 +128,6 @@ export const Login: React.FC = () => {
                 <LogIn className="mr-2 h-4 w-4" />
                 Sign In
               </Button>
-
-              <div className="relative w-full text-center my-1">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">or try demo mode</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 w-full">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDemoLogin('HOST')}
-                  className="text-xs"
-                >
-                  <UserCheck className="mr-1.5 h-3.5 w-3.5 text-primary" />
-                  Demo Host
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDemoLogin('STUDENT')}
-                  className="text-xs"
-                >
-                  <GraduationCap className="mr-1.5 h-3.5 w-3.5 text-blue-500" />
-                  Demo Student
-                </Button>
-              </div>
 
               <div className="text-center text-xs text-muted-foreground pt-1">
                 Don&apos;t have an account?{' '}

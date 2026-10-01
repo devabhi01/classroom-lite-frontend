@@ -106,116 +106,9 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     }
   }, [classroomCode, currentUser?.id]);
 
-  const enableDemoMode = useCallback(() => {
-    const isStudentUser = currentUser?.role === 'STUDENT';
-    const hostId = isStudentUser ? 'demo_teacher_host' : (currentUser?.id || 'demo_host_101');
-
-    const demoRoom: Classroom = {
-      id: 'demo_' + classroomCode,
-      name: classroomCode === 'DEMO101' ? 'Distributed Systems 101 (Demo Class)' : `Classroom (${classroomCode})`,
-      code: classroomCode,
-      hostId,
-      status: 'ACTIVE',
-    };
-    setClassroom(demoRoom);
-
-    // Populate realistic participants for demo
-    const mockParticipants: Participant[] = isStudentUser
-      ? [
-          {
-            userId: 'demo_teacher_host',
-            name: 'Prof. Abhishek',
-            role: 'HOST',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: currentUser?.id || 'demo_student_me',
-            name: currentUser?.name || 'Alex Kumar',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_sarah',
-            name: 'Sarah Connor',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_dev',
-            name: 'Dev Patel',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_priya',
-            name: 'Priya Sharma',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-        ]
-      : [
-          {
-            userId: currentUser?.id || 'demo_host_101',
-            name: currentUser?.name || 'Prof. Abhishek',
-            role: 'HOST',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_alex',
-            name: 'Alex Kumar',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_sarah',
-            name: 'Sarah Connor',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_dev',
-            name: 'Dev Patel',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-        ];
-
-    setParticipants(mockParticipants);
-
-    // Initial mock PDF presentation
-    setInitialPdf({
-      fileName: 'Distributed-Systems-Architecture.pdf',
-      fileUrl: '',
-      totalPages: 10,
-      currentPage: 1,
-    });
-
-    // Initial mock whiteboard welcoming strokes
-    setInitialWhiteboard([
-      { type: 'draw', x1: 0.2, y1: 0.25, x2: 0.8, y2: 0.25, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.2, y1: 0.5, x2: 0.8, y2: 0.5, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.2, y1: 0.25, x2: 0.2, y2: 0.5, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.8, y1: 0.25, x2: 0.8, y2: 0.5, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.5, y1: 0.5, x2: 0.5, y2: 0.75, color: '#dc2626', width: 3 },
-    ]);
-
-    setError(null);
-    toast.info(
-      isStudentUser
-        ? 'Welcome to Student Demo Mode! Viewing Prof. Abhishek\'s class.'
-        : 'Welcome to Instructor Demo Mode! Whiteboard, PDF, and Screen Share are ready.',
-      'Demo Classroom'
-    );
-  }, [classroomCode, currentUser]);
-
   useEffect(() => {
-    if (classroomCode === 'DEMO101') {
-      enableDemoMode();
-      setLoading(false);
-      return;
-    }
     fetchClassroom();
-  }, [classroomCode, enableDemoMode, fetchClassroom]);
+  }, [classroomCode, fetchClassroom]);
 
   // 2. Connect Socket.IO and establish real-time listeners
   useEffect(() => {
@@ -398,7 +291,7 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
 
   // Periodic poll for host pending requests (every 3 seconds)
   useEffect(() => {
-    if (!isHost || classroomCode === 'DEMO101') return;
+    if (!isHost) return;
 
     const interval = setInterval(async () => {
       try {
@@ -507,7 +400,6 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     rejectJoinRequest,
     endClassroom,
     leaveClassroom,
-    enableDemoMode,
     refreshClassroom: fetchClassroom,
   };
 };

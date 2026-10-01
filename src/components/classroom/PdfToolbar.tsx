@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,6 +14,8 @@ import {
   Trash2,
   Maximize2,
   Minimize2,
+  PanelLeft,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -32,6 +34,14 @@ interface PdfToolbarProps {
   onZoomOut: () => void;
   onResetZoom: () => void;
   onClosePdf: () => void;
+  // Page jump
+  onSelectPage?: (page: number) => void;
+  hostCurrentPage?: number;
+  isFollowingHost?: boolean;
+  onSyncWithHost?: () => void;
+  // Thumbnails
+  showThumbnails?: boolean;
+  onToggleThumbnails?: () => void;
   // Fullscreen presentation props
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -60,6 +70,12 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
   onZoomOut,
   onResetZoom,
   onClosePdf,
+  onSelectPage,
+  hostCurrentPage = 1,
+  isFollowingHost = true,
+  onSyncWithHost,
+  showThumbnails = false,
+  onToggleThumbnails,
   isFullscreen = false,
   onToggleFullscreen,
   isAnnotating = false,
@@ -73,6 +89,13 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
   onClearAnnotations,
 }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pageInput, setPageInput] = useState<string>(String(pdfState?.currentPage || 1));
+
+  useEffect(() => {
+    if (pdfState?.currentPage) {
+      setPageInput(String(pdfState.currentPage));
+    }
+  }, [pdfState?.currentPage]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -81,10 +104,26 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
     }
   };
 
+  const handlePageInputSubmit = () => {
+    if (!pdfState || !onSelectPage) return;
+    const pageNum = parseInt(pageInput, 10);
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= pdfState.totalPages) {
+      onSelectPage(pageNum);
+    } else {
+      setPageInput(String(pdfState.currentPage));
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handlePageInputSubmit();
+    }
+  };
+
   return (
     <div className="flex flex-col border-b border-border bg-card/95 select-none backdrop-blur-sm">
       {/* Primary Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2 text-xs">
         <input
           ref={fileInputRef}
           type="file"
@@ -93,7 +132,7 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
           onChange={handleFileChange}
         />
 
-        {/* Left: Document Info or Share Button */}
+        {/* Left: Document Info, Upload, Thumbnails, & View Modes */}
         <div className="flex items-center space-x-2 min-w-0">
           {isHost && !pdfState && (
             <Button
@@ -107,28 +146,46 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
           )}
 
           {pdfState && (
-            <div className="flex items-center space-x-2 min-w-0">
-              <FileText className="h-4 w-4 text-primary shrink-0" />
-              <span className="font-medium text-foreground truncate max-w-[130px] sm:max-w-[200px]">
-                {pdfState.fileName}
-              </span>
-              {!isHost && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                  Host View
-                </Badge>
+            <>
+              {/* Thumbnails Sidebar Toggle */}
+              {onToggleThumbnails && (
+                <Button
+                  variant={showThumbnails ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={onToggleThumbnails}
+                  className="h-7 px-2 text-xs font-medium"
+                  title={showThumbnails ? 'Hide page thumbnails' : 'Show all page thumbnails'}
+                >
+                  <PanelLeft className="h-3.5 w-3.5 sm:mr-1 text-primary" />
+                  <span className="hidden sm:inline">Pages</span>
+                </Button>
               )}
-            </div>
+
+
+
+              <div className="flex items-center space-x-1.5 min-w-0">
+                <FileText className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-medium text-foreground truncate max-w-[100px] sm:max-w-[180px]">
+                  {pdfState.fileName}
+                </span>
+                {!isHost && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 hidden md:inline-flex">
+                    {isFollowingHost ? 'Following Host' : 'Browsing'}
+                  </Badge>
+                )}
+              </div>
+            </>
           )}
         </div>
 
-        {/* Center: Page Controls */}
+        {/* Center: Interactive Page Controls & Sync Button */}
         {pdfState && (
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1 sm:space-x-1.5">
             <Button
               variant="outline"
               size="icon"
               onClick={onPrevPage}
-              disabled={!isHost || pdfState.currentPage <= 1}
+              disabled={pdfState.currentPage <= 1}
               className="h-7 w-7"
               title="Previous page"
               aria-label="Previous Page"
@@ -136,8 +193,19 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
               <ChevronLeft className="h-4 w-4" />
             </Button>
 
-            <div className="flex items-center px-2 py-0.5 rounded bg-muted text-xs font-mono font-medium">
-              <span>{pdfState.currentPage}</span>
+            {/* Direct Page Jump Input */}
+            <div className="flex items-center px-1.5 py-0.5 rounded bg-muted text-xs font-mono font-medium border border-border/40">
+              <input
+                type="number"
+                min={1}
+                max={pdfState.totalPages}
+                value={pageInput}
+                onChange={(e) => setPageInput(e.target.value)}
+                onBlur={handlePageInputSubmit}
+                onKeyDown={handleKeyDown}
+                className="w-8 text-center bg-transparent border-0 focus:outline-hidden focus:bg-background/80 rounded px-0.5 text-xs font-mono font-bold text-foreground"
+                title="Type page number and press Enter"
+              />
               <span className="mx-1 text-muted-foreground">/</span>
               <span>{pdfState.totalPages}</span>
             </div>
@@ -146,17 +214,31 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
               variant="outline"
               size="icon"
               onClick={onNextPage}
-              disabled={!isHost || pdfState.currentPage >= pdfState.totalPages}
+              disabled={pdfState.currentPage >= pdfState.totalPages}
               className="h-7 w-7"
               title="Next page"
               aria-label="Next Page"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
+
+            {/* Student "Sync with Host" pill if viewing a different page */}
+            {!isHost && !isFollowingHost && onSyncWithHost && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onSyncWithHost}
+                className="h-7 px-2 text-[11px] font-medium bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 border border-emerald-500/30"
+                title={`Host is currently on slide ${hostCurrentPage}. Click to jump to host view.`}
+              >
+                <Eye className="h-3 w-3 mr-1" />
+                <span>Sync with Host ({hostCurrentPage})</span>
+              </Button>
+            )}
           </div>
         )}
 
-        {/* Right: Whiteboard Overlay Toggle & Zoom Controls */}
+        {/* Right: Annotation Toggle, Zoom, Fullscreen, & Close */}
         {pdfState && (
           <div className="flex items-center space-x-1 sm:space-x-2">
             {/* Draw / Annotate on PDF Toggle */}
@@ -168,16 +250,19 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
                 className="h-7 px-2.5 text-xs font-medium"
                 title="Toggle drawing and annotations on top of PDF"
               >
-                <PenTool className="h-3.5 w-3.5 mr-1" />
-                <span>{isAnnotating ? 'Draw Mode ON' : 'Draw on PDF'}</span>
+                <PenTool className="h-3.5 w-3.5 sm:mr-1" />
+                <span className="hidden sm:inline">
+                  {isAnnotating ? 'Drawing ON' : 'Draw on PDF'}
+                </span>
               </Button>
             )}
 
             {/* Zoom controls */}
-            <div className="flex items-center space-x-1 rounded-md bg-muted p-0.5">
+            <div className="flex items-center space-x-0.5 rounded-md bg-muted p-0.5">
               <button
+                type="button"
                 onClick={onZoomOut}
-                className="h-6 w-6 rounded hover:bg-background/80 flex items-center justify-center text-muted-foreground hover:text-foreground"
+                className="h-6 w-6 rounded hover:bg-background/80 flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
                 title="Zoom out"
                 aria-label="Zoom Out"
               >
@@ -185,16 +270,18 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
               </button>
               <span className="px-1 text-[11px] font-mono font-medium">{Math.round(zoom * 100)}%</span>
               <button
+                type="button"
                 onClick={onZoomIn}
-                className="h-6 w-6 rounded hover:bg-background/80 flex items-center justify-center text-muted-foreground hover:text-foreground"
+                className="h-6 w-6 rounded hover:bg-background/80 flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
                 title="Zoom in"
                 aria-label="Zoom In"
               >
                 <ZoomIn className="h-3.5 w-3.5" />
               </button>
               <button
+                type="button"
                 onClick={onResetZoom}
-                className="h-6 w-6 rounded hover:bg-background/80 flex items-center justify-center text-muted-foreground hover:text-foreground"
+                className="h-6 w-6 rounded hover:bg-background/80 flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
                 title="Reset zoom"
                 aria-label="Reset Zoom"
               >
@@ -213,11 +300,11 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
                 aria-label="Toggle Fullscreen Presentation"
               >
                 {isFullscreen ? (
-                  <Minimize2 className="h-3.5 w-3.5 mr-1 text-primary" />
+                  <Minimize2 className="h-3.5 w-3.5 text-primary" />
                 ) : (
-                  <Maximize2 className="h-3.5 w-3.5 mr-1" />
+                  <Maximize2 className="h-3.5 w-3.5" />
                 )}
-                <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
+                <span className="hidden md:inline ml-1">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
               </Button>
             )}
 
@@ -232,7 +319,7 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
                 aria-label="Close PDF"
               >
                 <X className="h-3.5 w-3.5 mr-1" />
-                <span>Close</span>
+                <span className="hidden sm:inline">Close</span>
               </Button>
             )}
           </div>
@@ -248,87 +335,83 @@ export const PdfToolbar: React.FC<PdfToolbarProps> = ({
               variant={annotationTool === 'pen' ? 'default' : 'outline'}
               size="sm"
               onClick={() => onAnnotationToolChange?.('pen')}
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-xs"
+              title="Standard Pen"
             >
               <PenTool className="h-3 w-3 mr-1" />
               Pen
             </Button>
-
             <Button
               variant={annotationTool === 'highlighter' ? 'default' : 'outline'}
               size="sm"
               onClick={() => onAnnotationToolChange?.('highlighter')}
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-xs"
+              title="Semi-transparent Yellow Highlighter"
             >
               <Highlighter className="h-3 w-3 mr-1" />
               Highlighter
             </Button>
-
             <Button
               variant={annotationTool === 'eraser' ? 'default' : 'outline'}
               size="sm"
               onClick={() => onAnnotationToolChange?.('eraser')}
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-xs"
+              title="Eraser"
             >
               <Eraser className="h-3 w-3 mr-1" />
               Eraser
             </Button>
           </div>
 
-          {/* Palette & Stroke Width */}
-          <div className="flex items-center space-x-3">
-            {annotationTool !== 'eraser' && (
-              <div className="flex items-center space-x-1.5">
-                {PRESET_PEN_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => onAnnotationColorChange?.(c)}
-                    className={`h-4 w-4 rounded-full border transition-transform ${
-                      annotationColor === c
-                        ? 'scale-125 ring-2 ring-primary ring-offset-1 border-transparent'
-                        : 'border-border/60 hover:scale-110'
-                    }`}
-                    style={{ backgroundColor: c }}
-                    title={`Color ${c}`}
-                    aria-label={`Color ${c}`}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Stroke Width Selector */}
-            <div className="flex items-center space-x-1 rounded bg-muted p-0.5">
-              {[
-                { label: 'S', width: 2 },
-                { label: 'M', width: 4 },
-                { label: 'L', width: 8 },
-              ].map((sw) => (
+          {/* Color palette for pen */}
+          {annotationTool === 'pen' && (
+            <div className="flex items-center space-x-1.5">
+              <span className="text-[11px] font-medium text-muted-foreground mr-1">Color:</span>
+              {PRESET_PEN_COLORS.map((col) => (
                 <button
-                  key={sw.width}
-                  onClick={() => onAnnotationStrokeWidthChange?.(sw.width)}
-                  className={`h-5 w-5 rounded text-[10px] font-medium transition-colors ${
-                    annotationStrokeWidth === sw.width
-                      ? 'bg-background text-foreground shadow-xs font-bold'
-                      : 'text-muted-foreground hover:text-foreground'
+                  key={col}
+                  type="button"
+                  onClick={() => onAnnotationColorChange?.(col)}
+                  className={`h-4 w-4 rounded-full border transition-transform ${
+                    annotationColor === col ? 'scale-125 ring-2 ring-primary ring-offset-1' : 'hover:scale-110'
                   }`}
-                  title={`Stroke width ${sw.width}px`}
-                >
-                  {sw.label}
-                </button>
+                  style={{ backgroundColor: col }}
+                  title={`Color ${col}`}
+                />
               ))}
             </div>
+          )}
 
-            {/* Clear Page Annotations */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClearAnnotations}
-              className="h-6 px-2 text-[11px] text-muted-foreground hover:text-destructive"
-              title="Clear annotations on this page"
-            >
-              <Trash2 className="h-3 w-3 mr-1" />
-              Clear Annotations
-            </Button>
+          {/* Stroke Width Selector */}
+          <div className="flex items-center space-x-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground">Width:</span>
+            {[2, 4, 8].map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => onAnnotationStrokeWidthChange?.(w)}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                  annotationStrokeWidth === w
+                    ? 'border-primary bg-primary text-primary-foreground font-bold'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {w}px
+              </button>
+            ))}
+
+            {onClearAnnotations && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClearAnnotations}
+                className="h-6 px-2 text-[11px] text-destructive hover:bg-destructive/10 ml-2"
+                title="Clear all annotations on this page"
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Clear Slide
+              </Button>
+            )}
           </div>
         </div>
       )}

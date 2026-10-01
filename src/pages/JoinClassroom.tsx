@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { LogIn, Loader2, Clock, XCircle, ArrowLeft, Sparkles, GraduationCap, RefreshCw } from 'lucide-react';
+import { LogIn, Loader2, Clock, XCircle, ArrowLeft, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
@@ -11,7 +11,7 @@ import { toast } from '@/components/ui/Toast';
 
 export const JoinClassroom: React.FC = () => {
   const navigate = useNavigate();
-  const { user, loginAsDemo } = useAuth();
+  const { user } = useAuth();
 
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
@@ -21,23 +21,12 @@ export const JoinClassroom: React.FC = () => {
 
   const socketRef = useRef<any>(null);
 
-  const handleEnterDemoStudent = () => {
-    loginAsDemo('STUDENT');
-    navigate('/classroom/DEMO101');
-  };
-
   const handleRequestJoin = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = code.trim().toUpperCase();
 
     if (!cleanCode) {
       setError('Please enter a classroom code');
-      return;
-    }
-
-    // Direct shortcut for Demo classroom
-    if (cleanCode === 'DEMO101' || cleanCode.startsWith('DEMO')) {
-      handleEnterDemoStudent();
       return;
     }
 
@@ -201,25 +190,6 @@ export const JoinClassroom: React.FC = () => {
                   <LogIn className="mr-2 h-4 w-4" />
                   Request to Join
                 </Button>
-
-                {/* <div className="relative w-full text-center my-1">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-[10px] uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">or test right away</span>
-                  </div>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleEnterDemoStudent}
-                  className="w-full border-primary/30 hover:bg-primary/5 text-primary text-xs font-medium"
-                >
-                  <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
-                  <span>Try Demo Classroom as Student</span>
-                </Button> */}
 
                 <Link to="/dashboard" className="text-xs text-muted-foreground hover:underline text-center pt-1">
                   Back to Dashboard

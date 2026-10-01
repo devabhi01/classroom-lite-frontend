@@ -7,6 +7,13 @@ export interface Classroom {
   name: string;
   code: string;
   hostId: string;
+  type?: 'INDEPENDENT' | 'INSTITUTION';
+  institutionId?: string | null;
+  institution?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
   status: 'ACTIVE' | 'ENDED';
   createdAt?: string;
   updatedAt?: string;
@@ -14,6 +21,8 @@ export interface Classroom {
 
 export interface CreateClassroomDto {
   name: string;
+  type?: 'INDEPENDENT' | 'INSTITUTION';
+  institutionId?: string;
 }
 
 export type WorkspaceTab = 'pdf' | 'whiteboard' | 'screenshare';

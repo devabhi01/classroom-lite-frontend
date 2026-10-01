@@ -14,10 +14,14 @@ import { CreateClassroom } from '@/pages/CreateClassroom';
 import { JoinClassroom } from '@/pages/JoinClassroom';
 import { Classroom } from '@/pages/Classroom';
 import { Profile } from '@/pages/Profile';
+import { VerifyEmail } from '@/pages/VerifyEmail';
+import { Analytics } from '@/pages/Analytics';
+import { RecentClassrooms } from '@/pages/RecentClassrooms';
+import { InstitutionManagement } from '@/pages/InstitutionManagement';
 
 // Protected Route Guard
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -31,6 +35,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   if (!isAuthenticated) {
     const redirectUrl = encodeURIComponent(location.pathname + location.search);
     return <Navigate to={`/login?redirect=${redirectUrl}`} replace />;
+  }
+
+  if (user && user.isEmailVerified === false) {
+    return <Navigate to={`/verify-email?email=${encodeURIComponent(user.email)}`} replace />;
   }
 
   return <>{children}</>;
@@ -47,6 +55,9 @@ const TeacherRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     );
   }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (user && user.isEmailVerified === false) {
+    return <Navigate to={`/verify-email?email=${encodeURIComponent(user.email)}`} replace />;
+  }
   if (user?.role === 'STUDENT') {
     return <Navigate to="/dashboard" replace />;
   }
@@ -55,7 +66,7 @@ const TeacherRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 // Public Only Route Guard (for login/signup)
 const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -65,7 +76,7 @@ const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) 
     );
   }
 
-  if (isAuthenticated) {
+  if (isAuthenticated && user?.isEmailVerified !== false) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -120,6 +131,14 @@ export const AppRoutes: React.FC = () => {
           </PublicOnlyRoute>
         }
       />
+      <Route
+        path="/verify-email"
+        element={
+          <Layout>
+            <VerifyEmail />
+          </Layout>
+        }
+      />
 
       {/* Protected Routes */}
       <Route
@@ -158,6 +177,46 @@ export const AppRoutes: React.FC = () => {
           <ProtectedRoute>
             <Layout>
               <Profile />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/institutions"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <InstitutionManagement />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/institutions/:id"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <InstitutionManagement />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/recent-classrooms"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <RecentClassrooms />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <Analytics />
             </Layout>
           </ProtectedRoute>
         }

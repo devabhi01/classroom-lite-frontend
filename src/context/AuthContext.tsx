@@ -18,8 +18,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const storedUser = localStorage.getItem(USER_STORAGE_KEY);
 
       if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        if (storedToken.startsWith('demo_jwt_token_')) {
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
+          localStorage.removeItem(USER_STORAGE_KEY);
+        } else {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+        }
       }
     } catch (err) {
       console.error('Failed to parse stored auth user', err);
@@ -88,9 +93,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signup = useCallback(async (payload: SignupDto) => {
     try {
-      // Backend SignupDto strictly only accepts { name, email, password, avatar }
-      // Sending additional properties like 'role' causes NestJS ValidationPipe to reject with 400 Bad Request
-      const backendPayload: { name: string; email: string; password: string; avatar?: string; role?: string } = {
+      const backendPayload: Record<string, any> = {
         name: payload.name.trim(),
         email: payload.email.trim(),
         password: payload.password,
@@ -100,6 +103,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if (payload.role) {
         backendPayload.role = payload.role;
+      }
+      if (payload.institutionName) {
+        backendPayload.institutionName = payload.institutionName.trim();
+      }
+      if (payload.institutionId) {
+        backendPayload.institutionId = payload.institutionId;
+      }
+      if (payload.institutionCode) {
+        backendPayload.institutionCode = payload.institutionCode.trim();
+      }
+      if (payload.institutionIds && payload.institutionIds.length > 0) {
+        backendPayload.institutionIds = payload.institutionIds;
       }
 
       const response = await api.post('/auth/signup', backendPayload);
@@ -122,6 +137,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: payload.role || userPayload?.role || data?.role || 'STUDENT',
       };
 
+      const requiresVerification =
+        data?.requiresVerification === true ||
+        authData?.requiresVerification === true ||
+        userPayload?.isEmailVerified === false;
+
+      if (requiresVerification) {
+        toast.info('Account created! Please enter the 6-digit verification code sent to your email.');
+        return;
+      }
+
       if (receivedToken) {
         localStorage.setItem(TOKEN_STORAGE_KEY, receivedToken);
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(receivedUser));
@@ -138,22 +163,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const loginAsDemo = useCallback((role: 'HOST' | 'STUDENT' = 'HOST', customName?: string) => {
-    const isHostRole = role === 'HOST';
-    const demoUser: User = {
-      id: isHostRole ? 'demo_host_101' : 'demo_student_202',
-      name: customName || (isHostRole ? 'Prof. Abhishek (Demo Host)' : 'Alex Kumar (Demo Student)'),
-      email: isHostRole ? 'host@tdpclassroom.com' : 'student@tdpclassroom.com',
-      role: isHostRole ? 'TEACHER' : 'STUDENT',
-    };
-    const demoToken = `demo_jwt_token_${Date.now()}`;
+  const verifyEmail = useCallback(async (dto: { email: string; otp: string }) => {
+    try {
+      const response = await api.post('/auth/verify-email', {
+        email: dto.email.toLowerCase().trim(),
+        otp: dto.otp.trim(),
+      });
+      const data = response.data;
+      const authData = data?.data || data;
 
-    localStorage.setItem(TOKEN_STORAGE_KEY, demoToken);
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(demoUser));
+      const receivedToken: string =
+        authData?.accessToken ||
+        authData?.token ||
+        data?.accessToken ||
+        data?.token;
 
-    setToken(demoToken);
-    setUser(demoUser);
-    toast.success(`Logged in as ${demoUser.name} (Demo Mode)`);
+      const userPayload = authData?.user || data?.user;
+      if (receivedToken && userPayload) {
+        const receivedUser: User = {
+          id: userPayload.id || userPayload._id,
+          name: userPayload.name,
+          email: userPayload.email,
+          avatar: userPayload.avatar,
+          role: userPayload.role,
+          isEmailVerified: true,
+        };
+        localStorage.setItem(TOKEN_STORAGE_KEY, receivedToken);
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(receivedUser));
+        setToken(receivedToken);
+        setUser(receivedUser);
+      }
+      toast.success('Email verified successfully! Welcome.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Verification failed';
+      toast.error(message, 'Verification Error');
+      throw error;
+    }
+  }, []);
+
+  const resendVerification = useCallback(async (email: string) => {
+    try {
+      await api.post('/auth/resend-verification', {
+        email: email.toLowerCase().trim(),
+      });
+      toast.success('A new 6-digit verification code has been sent to your email.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to resend code';
+      toast.error(message, 'Resend Failed');
+      throw error;
+    }
   }, []);
 
   const updateRole = useCallback((newRole: UserRole) => {
@@ -181,7 +239,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loading,
     login,
     signup,
-    loginAsDemo,
+    verifyEmail,
+    resendVerification,
     updateRole,
     logout,
   };

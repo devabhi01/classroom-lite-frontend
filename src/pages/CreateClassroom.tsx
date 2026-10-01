@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { PlusCircle, ArrowRight, Copy, Check, Sparkles } from 'lucide-react';
+import { PlusCircle, ArrowRight, Copy, Check, Sparkles, Building2, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
@@ -9,11 +9,18 @@ import { copyToClipboard } from '@/lib/utils';
 import { toast } from '@/components/ui/Toast';
 import { Classroom } from '@/types/classroom';
 import { useAuth } from '@/hooks/useAuth';
+import { institutionsApi } from '@/lib/institutions';
+import { InstitutionMembership } from '@/types/institution';
 
 export const CreateClassroom: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [name, setName] = useState('');
+  const [type, setType] = useState<'INDEPENDENT' | 'INSTITUTION'>('INDEPENDENT');
+  const [institutionId, setInstitutionId] = useState<string>('');
+  const [userInstitutions, setUserInstitutions] = useState<InstitutionMembership[]>([]);
+  const [loadingInstitutions, setLoadingInstitutions] = useState(false);
+
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [createdRoom, setCreatedRoom] = useState<Classroom | null>(null);
@@ -26,6 +33,32 @@ export const CreateClassroom: React.FC = () => {
     }
   }, [user, navigate]);
 
+  useEffect(() => {
+    const fetchInstitutions = async () => {
+      try {
+        setLoadingInstitutions(true);
+        const memberships = await institutionsApi.getMy();
+        // Only institutions where user has accepted membership and teacher/owner/admin role
+        const valid = memberships.filter(
+          (m) =>
+            m.status === 'ACCEPTED' &&
+            ['OWNER', 'ADMIN', 'TEACHER'].includes(m.role) &&
+            m.institution
+        );
+        setUserInstitutions(valid);
+        if (valid.length > 0 && valid[0].institution) {
+          setInstitutionId(valid[0].institution.id);
+        }
+      } catch (err) {
+        console.error('Failed to load user institutions', err);
+      } finally {
+        setLoadingInstitutions(false);
+      }
+    };
+
+    fetchInstitutions();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -33,10 +66,25 @@ export const CreateClassroom: React.FC = () => {
       return;
     }
 
+    if (type === 'INSTITUTION' && !institutionId) {
+      setError('Please select an institution for this classroom');
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError('');
-      const res = await api.post('/classrooms', { name: name.trim() });
+
+      const payload: { name: string; type: 'INDEPENDENT' | 'INSTITUTION'; institutionId?: string } = {
+        name: name.trim(),
+        type,
+      };
+
+      if (type === 'INSTITUTION') {
+        payload.institutionId = institutionId;
+      }
+
+      const res = await api.post('/classrooms', payload);
       const room: Classroom = res.data.data || res.data.classroom || res.data;
 
       setCreatedRoom(room);
@@ -52,20 +100,6 @@ export const CreateClassroom: React.FC = () => {
         // Ignore cache storage error
       }
     } catch (err: any) {
-      const isServerOffline = err.message?.toLowerCase().includes('connect') || err.message?.toLowerCase().includes('server');
-      if (isServerOffline) {
-        // Fallback: create classroom in local demo mode so user can test the UI immediately
-        const fallbackRoom: Classroom = {
-          id: 'demo_' + Date.now(),
-          name: name.trim(),
-          code: 'TDP' + Math.random().toString(36).substring(2, 5).toUpperCase(),
-          hostId: 'demo_host_101',
-          status: 'ACTIVE',
-        };
-        setCreatedRoom(fallbackRoom);
-        toast.info('Backend server is offline. Classroom created in Standalone Demo Mode.');
-        return;
-      }
       setError(err.message || 'Failed to create classroom. Please try again.');
       toast.error(err.message || 'Failed to create classroom');
     } finally {
@@ -112,6 +146,80 @@ export const CreateClassroom: React.FC = () => {
                   autoFocus
                   required
                 />
+
+                {/* Scope: Independent vs Institution */}
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-foreground">Classroom Scope</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setType('INDEPENDENT')}
+                      className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
+                        type === 'INDEPENDENT'
+                          ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary'
+                          : 'border-input hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-semibold">
+                        <Globe className="h-3.5 w-3.5" />
+                        <span>Independent</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        Any student with code can join
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={userInstitutions.length === 0}
+                      onClick={() => setType('INSTITUTION')}
+                      className={`flex flex-col items-start p-2.5 rounded-lg border text-left transition-all ${
+                        type === 'INSTITUTION'
+                          ? 'border-primary bg-primary/10 text-primary font-semibold ring-1 ring-primary'
+                          : userInstitutions.length === 0
+                          ? 'opacity-50 cursor-not-allowed border-input bg-muted/40 text-muted-foreground'
+                          : 'border-input hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 text-xs font-semibold">
+                        <Building2 className="h-3.5 w-3.5" />
+                        <span>Institution</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                        Scoped to institution members
+                      </span>
+                    </button>
+                  </div>
+
+                  {userInstitutions.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      You are not currently an approved teacher or owner of any institution. Independent mode is active.
+                    </p>
+                  )}
+                </div>
+
+                {/* Institution Selector */}
+                {type === 'INSTITUTION' && userInstitutions.length > 0 && (
+                  <div className="space-y-1.5 rounded-lg border border-border/70 bg-muted/30 p-3">
+                    <label className="block text-xs font-medium text-foreground">
+                      Select Institution
+                    </label>
+                    <select
+                      value={institutionId}
+                      onChange={(e) => setInstitutionId(e.target.value)}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      {userInstitutions.map((m) => (
+                        <option key={m.institution?.id} value={m.institution?.id}>
+                          {m.institution?.name} ({m.institution?.code})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-muted-foreground">
+                      Only students accepted into this institution can join this classroom.
+                    </p>
+                  </div>
+                )}
               </CardContent>
 
               <CardFooter className="flex flex-col space-y-3">
@@ -119,7 +227,10 @@ export const CreateClassroom: React.FC = () => {
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Create Classroom
                 </Button>
-                <Link to="/dashboard" className="text-xs text-muted-foreground hover:underline text-center">
+                <Link
+                  to="/dashboard"
+                  className="text-xs text-muted-foreground hover:underline text-center"
+                >
                   Cancel and back to Dashboard
                 </Link>
               </CardFooter>
@@ -155,7 +266,11 @@ export const CreateClassroom: React.FC = () => {
                   onClick={handleCopyCode}
                   aria-label="Copy Classroom Code"
                 >
-                  {isCopied ? <Check className="mr-2 h-4 w-4 text-emerald-600" /> : <Copy className="mr-2 h-4 w-4" />}
+                  {isCopied ? (
+                    <Check className="mr-2 h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Copy className="mr-2 h-4 w-4" />
+                  )}
                   <span>{isCopied ? 'Code Copied!' : 'Copy Code'}</span>
                 </Button>
 

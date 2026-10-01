@@ -41,7 +41,6 @@ export const Classroom: React.FC = () => {
     rejectJoinRequest,
     endClassroom,
     leaveClassroom,
-    enableDemoMode,
     refreshClassroom,
   } = useClassroom({
     classroomCode,
@@ -142,7 +141,7 @@ export const Classroom: React.FC = () => {
           </p>
           {isServerOffline && (
             <p className="text-xs text-muted-foreground bg-muted p-2 rounded border border-border">
-              The NestJS backend server at <code className="font-mono text-primary">http://localhost:3000</code> is currently offline. You can start the backend, or continue directly in Standalone Demo Mode.
+              The backend server at <code className="font-mono text-primary">http://localhost:3000</code> is currently offline. Please ensure the backend is running.
             </p>
           )}
           <div className="flex flex-col sm:flex-row justify-center gap-2 pt-2">
@@ -151,9 +150,6 @@ export const Classroom: React.FC = () => {
             </Button>
             <Button variant="secondary" size="sm" onClick={refreshClassroom}>
               Retry Connection
-            </Button>
-            <Button size="sm" onClick={enableDemoMode} className="bg-primary">
-              Continue in Demo Mode
             </Button>
           </div>
         </div>
@@ -169,6 +165,8 @@ export const Classroom: React.FC = () => {
         classroomCode={classroom.code}
         participantCount={participants.length}
         isHost={isHost}
+        createdAt={classroom.createdAt}
+        isEnded={classroom.status === 'ENDED'}
         onLeave={leaveClassroom}
         onEndClassroom={isHost ? endClassroom : undefined}
         onToggleParticipants={toggleParticipants}
@@ -265,6 +263,7 @@ export const Classroom: React.FC = () => {
               classroomCode={classroomCode}
               isHost={isHost}
               initialOperations={initialWhiteboard}
+              userId={user?.id}
             />
           </div>
 
