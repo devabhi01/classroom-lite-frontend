@@ -8,9 +8,14 @@ import {
   Copy,
   Check,
   Users,
+  Building2,
+  KeyRound,
+  ShieldCheck,
+  Settings,
+  LogOut,
+  Globe,
   BarChart3,
   Presentation,
-  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/Card';
@@ -20,13 +25,17 @@ import api from '@/lib/api';
 import { copyToClipboard } from '@/lib/utils';
 import { toast } from '@/components/ui/Toast';
 import { Classroom } from '@/types/classroom';
+import { Institution, InstitutionMembership } from '@/types/institution';
+import { institutionsApi } from '@/lib/institutions';
+import { JoinInstitutionDialog } from '@/components/institution/JoinInstitutionDialog';
+import { CreateInstitutionDialog } from '@/components/institution/CreateInstitutionDialog';
+import { ManageInstitutionDialog } from '@/components/institution/ManageInstitutionDialog';
 
 export const Dashboard: React.FC = () => {
   const { user } = useAuth();
   const isStudent = user?.role === 'STUDENT';
   const [recentClassrooms, setRecentClassrooms] = useState<Classroom[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [institutions, setInstitutions] = useState<InstitutionMembership[]>([]);
   const [analytics, setAnalytics] = useState<{
     totalSessions: number;
     activeSessions: number;
@@ -34,114 +43,96 @@ export const Dashboard: React.FC = () => {
     studentsOrTeachersCount: number;
     avgDurationFormatted: string;
   } | null>(null);
+  const [isLoadingClassrooms, setIsLoadingClassrooms] = useState(true);
+  const [isLoadingInstitutions, setIsLoadingInstitutions] = useState(true);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchRecentClassrooms = async () => {
-      try {
-        setIsLoading(true);
-        let rooms: Classroom[] = [];
+  // Dialog States
+  const [isJoinInstOpen, setIsJoinInstOpen] = useState(false);
+  const [isCreateInstOpen, setIsCreateInstOpen] = useState(false);
+  const [managingInstitution, setManagingInstitution] = useState<Institution | null>(null);
 
-        // 1. Try dedicated recent classrooms endpoint
-        try {
-          const res = await api.get('/classrooms/recent');
-          const raw = res.data?.classrooms || res.data?.data || res.data;
-          if (Array.isArray(raw)) {
-            rooms = raw.map((r: any) => ({
-              id: r.id || r._id || r.classroomId,
-              name: r.name,
-              code: r.code,
-              status: r.status,
-              hostId: r.hostId || (typeof r.host === 'object' ? r.host?.id : r.host) || '',
-              createdAt: r.createdAt,
-              endedAt: r.endedAt,
-            }));
-          }
-        } catch {
-          // 2. Fallback to role-specific history endpoints
-          try {
-            const historyUrl = isStudent ? '/classrooms/history/student' : '/classrooms/history/teacher';
-            const historyRes = await api.get(historyUrl);
-            const historyRaw = historyRes.data?.data || historyRes.data;
-            if (Array.isArray(historyRaw)) {
-              rooms = historyRaw.map((r: any) => ({
-                id: r.id || r._id || r.classroomId,
-                name: r.name,
-                code: r.code,
-                status: r.status,
-                hostId: r.hostId || (typeof r.host === 'object' ? r.host?.id : r.host) || '',
-                createdAt: r.createdAt,
-                endedAt: r.endedAt,
-              }));
-            }
-          } catch {
-            // Ignore
-          }
+  const fetchInstitutions = async () => {
+    try {
+      setIsInstitutionsLoading(true);
+      const data = await institutionsApi.getMy();
+      setInstitutions(data);
+    } catch (err) {
+      console.error('Failed to load user institutions', err);
+    } finally {
+      setIsInstitutionsLoading(false);
+    }
+  };
+
+  const setIsInstitutionsLoading = (loading: boolean) => {
+    setIsLoadingInstitutions(loading);
+  };
+
+  const fetchClassrooms = async () => {
+    try {
+      setIsLoadingClassrooms(true);
+      // Fetch host classrooms or available classrooms
+      const res = await api.get('/classrooms');
+      const list = res.data?.data || res.data?.classrooms || (Array.isArray(res.data) ? res.data : []);
+      if (Array.isArray(list)) {
+        setRecentClassrooms(list);
+        localStorage.setItem('tdp_recent_classrooms', JSON.stringify(list));
+      } else {
+        // Fallback to local cache if empty
+        const cached = localStorage.getItem('tdp_recent_classrooms');
+        if (cached) {
+          setRecentClassrooms(JSON.parse(cached));
         }
-
-        const cacheKey = user?.id ? `tdp_recent_classrooms_${user.id}` : 'tdp_recent_classrooms';
-        if (rooms.length > 0) {
-          setRecentClassrooms(rooms);
-          localStorage.setItem(cacheKey, JSON.stringify(rooms));
-        } else {
-          // 3. Fallback to cached rooms from localStorage
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            setRecentClassrooms(JSON.parse(cached));
-          }
+      }
+    } catch {
+      // Fallback to recent classrooms saved locally
+      try {
+        const cached = localStorage.getItem('tdp_recent_classrooms');
+        if (cached) {
+          setRecentClassrooms(JSON.parse(cached));
         }
       } catch {
-        const cacheKey = user?.id ? `tdp_recent_classrooms_${user.id}` : 'tdp_recent_classrooms';
-        try {
-          const cached = localStorage.getItem(cacheKey);
-          if (cached) {
-            setRecentClassrooms(JSON.parse(cached));
-          }
-        } catch { }
-      } finally {
-        setIsLoading(false);
+        // Ignore parse errors
       }
-    };
+    } finally {
+      setIsLoadingClassrooms(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClassrooms();
+    fetchInstitutions();
 
     const fetchAnalytics = async () => {
       try {
-        const res = await api.get('/classrooms/analytics');
-        const d = res.data?.data;
+        const res = await api.get('/analytics/overview');
+        const d = res.data?.data || res.data;
         if (d) {
           if (isStudent && d.studentSummary) {
             setAnalytics({
-              totalSessions: d.studentSummary.totalClassesAttended,
-              activeSessions: 0,
-              totalTimeFormatted: d.studentSummary.totalLearningDurationFormatted || '0s',
-              studentsOrTeachersCount: d.studentSummary.uniqueInstructorsCount || 0,
-              avgDurationFormatted: d.studentSummary.avgAttendanceDurationFormatted || '0s',
+              totalSessions: d.studentSummary.totalAttended || 0,
+              activeSessions: d.studentSummary.activeSessions || 0,
+              totalTimeFormatted: d.studentSummary.totalLearningTimeFormatted || '0s',
+              studentsOrTeachersCount: d.studentSummary.teachersEncountered || 0,
+              avgDurationFormatted: d.studentSummary.avgSessionDurationFormatted || '0s',
             });
           } else if (d.teacherSummary) {
             setAnalytics({
-              totalSessions: d.teacherSummary.totalClassroomsHosted,
-              activeSessions: d.teacherSummary.activeClassroomsCount,
-              totalTimeFormatted: d.teacherSummary.totalTeachingDurationFormatted || '0s',
-              studentsOrTeachersCount: d.teacherSummary.totalStudentsTaught || 0,
+              totalSessions: d.teacherSummary.totalHosted || 0,
+              activeSessions: d.teacherSummary.activeSessions || 0,
+              totalTimeFormatted: d.teacherSummary.totalTeachingTimeFormatted || '0s',
+              studentsOrTeachersCount: d.teacherSummary.uniqueStudentsCount || 0,
               avgDurationFormatted: d.teacherSummary.avgDurationFormatted || '0s',
             });
           }
         }
       } catch {
-        // Handled via displayAnalytics fallback
+        // Fallback calculation will handle
       }
     };
 
-    fetchRecentClassrooms();
     fetchAnalytics();
   }, [isStudent]);
-
-  const handleCopy = async (code: string) => {
-    const success = await copyToClipboard(code);
-    if (success) {
-      setCopiedCode(code);
-      toast.success(`Copied classroom code ${code}`);
-      setTimeout(() => setCopiedCode(null), 2000);
-    }
-  };
 
   const displayAnalytics = analytics || {
     totalSessions: recentClassrooms.length,
@@ -151,10 +142,19 @@ export const Dashboard: React.FC = () => {
     avgDurationFormatted: recentClassrooms.length > 0 ? '30m' : '0s',
   };
 
+  const handleCopy = async (code: string) => {
+    const success = await copyToClipboard(code);
+    if (success) {
+      setCopiedCode(code);
+      toast.success(`Copied code ${code}`);
+      setTimeout(() => setCopiedCode(null), 2000);
+    }
+  };
+
   return (
     <div className="container mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 space-y-8">
       {/* Welcome Greeting Header */}
-      <div className="border-b border-border pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="border-b border-border pb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -166,30 +166,13 @@ export const Dashboard: React.FC = () => {
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             {isStudent
-              ? 'Join active classrooms with your classroom code to view slides, interact on whiteboards, and watch screen shares.'
-              : 'Manage your virtual classrooms, launch interactive teaching sessions, or join active classes.'}
+              ? 'Join active classrooms with your classroom code, interact on whiteboards, and follow presentations.'
+              : 'Manage your virtual classrooms, launch interactive teaching sessions, or oversee your institutions.'}
           </p>
-        </div>
-
-        {/* Analytics Action Button */}
-        <div className="flex items-center gap-2">
-          <Link to="/analytics">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 px-3 gap-1.5 font-medium border-primary/30 hover:border-primary hover:bg-primary/5 transition-all"
-            >
-              <BarChart3 className="h-4 w-4 text-primary" />
-              <span>Analytics</span>
-              <ArrowRight className="h-3 w-3 text-muted-foreground" />
-            </Button>
-          </Link>
         </div>
       </div>
 
-
-
-      {/* Main Actions Grid */}
+      {/* Main Classroom Action Cards */}
       <div className={`grid gap-6 ${isStudent ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
         {!isStudent && (
           <Card className="border border-border/80 hover:border-primary/40 transition-all shadow-sm">
@@ -199,7 +182,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <CardTitle className="text-xl">Create Classroom</CardTitle>
               <CardDescription>
-                Host a new interactive classroom session with whiteboard, PDF presentation, and screen sharing.
+                Host an interactive classroom session with whiteboard, PDF presentation, and screen sharing.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -213,7 +196,7 @@ export const Dashboard: React.FC = () => {
           </Card>
         )}
 
-        <Card className="border border-border/80 hover:border-primary/40 transition-all shadow-sm">
+        <Card className={`border border-border/80 hover:border-primary/40 transition-all shadow-sm ${isStudent ? 'border-primary/40 bg-card' : ''}`}>
           <CardHeader>
             <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center mb-2">
               <LogIn className="h-6 w-6" />
@@ -233,17 +216,14 @@ export const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Analytics Card */}
         <Card className="border border-border/80 hover:border-primary/40 transition-all shadow-sm">
           <CardHeader>
             <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-2">
               <BarChart3 className="h-6 w-6" />
             </div>
-            <CardTitle className="text-xl">Analytics & Reports</CardTitle>
+            <CardTitle className="text-xl">Session Analytics</CardTitle>
             <CardDescription>
-              {isStudent
-                ? 'Review your attendance history, total learning hours, and active class participation.'
-                : 'Monitor student engagement, session durations, and track virtual classroom attendance.'}
+              Review attendance records, teaching/learning durations, student engagement, and historical reports.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -256,6 +236,7 @@ export const Dashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
       {/* Analytics Snapshot & Insights Bar */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -328,15 +309,191 @@ export const Dashboard: React.FC = () => {
           </Card>
         </div>
       </div>
-      {/* Recent Classrooms Section (Top 3) */}
-      <div className="space-y-4 pt-4">
+
+      {/* INSTITUTIONS SECTION */}
+      <div className="space-y-4 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center space-x-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">My Institutions</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link to="/institutions">
+              <Button variant="ghost" size="sm" className="text-xs text-primary font-semibold">
+                Manage All Hub
+                <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsJoinInstOpen(true)}
+              className="text-xs"
+            >
+              <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+              Join by Code
+            </Button>
+            {!isStudent && (
+              <Button
+                size="sm"
+                onClick={() => setIsCreateInstOpen(true)}
+                className="text-xs"
+              >
+                <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+                Create Institution
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {isLoadingInstitutions ? (
+          <div className="flex justify-center p-8 text-xs text-muted-foreground">
+            Loading institutions...
+          </div>
+        ) : institutions.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-6 text-center bg-card">
+            <Building2 className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
+            <p className="text-sm font-medium text-foreground">No institutions joined yet</p>
+            <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto">
+              Institutions provide organized cohorts for classrooms and members. Join an institution with a code, or create your own.
+            </p>
+            <div className="mt-4 flex justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsJoinInstOpen(true)} className="text-xs">
+                <KeyRound className="mr-1.5 h-3.5 w-3.5" />
+                Join with Code
+              </Button>
+              {!isStudent && (
+                <Button size="sm" onClick={() => setIsCreateInstOpen(true)} className="text-xs">
+                  <PlusCircle className="mr-1.5 h-3.5 w-3.5" />
+                  Create Institution
+                </Button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {institutions.map((m) => {
+              const inst: Institution = m.institution || {
+                id: m.institutionId || m.id,
+                name: (m as any).name || 'Institution',
+                code: (m as any).code || '',
+                description: (m as any).description || null,
+                logo: (m as any).logo || null,
+                email: (m as any).email || null,
+                phone: (m as any).phone || null,
+                address: (m as any).address || null,
+                website: (m as any).website || null,
+                ownerId: (m as any).ownerId || '',
+                status: 'ACTIVE',
+                createdAt: (m as any).createdAt || '',
+                updatedAt: (m as any).updatedAt || '',
+              };
+              const isOwnerOrAdmin = m.role === 'OWNER' || m.role === 'ADMIN';
+              const isPending = m.status === 'REQUESTED';
+
+              return (
+                <div
+                  key={m.id}
+                  className="flex flex-col justify-between rounded-xl border border-border bg-card p-4 shadow-xs hover:border-primary/30 transition-all"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <span className="font-semibold text-sm text-foreground truncate block">
+                          {inst.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-[10px] text-muted-foreground">Code:</span>
+                          <span className="font-mono text-xs font-semibold text-primary">{inst.code}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(inst.code)}
+                            className="text-muted-foreground hover:text-foreground p-0.5"
+                            title="Copy code"
+                          >
+                            {copiedCode === inst.code ? (
+                              <Check className="h-3 w-3 text-emerald-600" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge
+                          variant={isOwnerOrAdmin ? 'default' : 'outline'}
+                          className="text-[10px] uppercase font-bold"
+                        >
+                          {m.role}
+                        </Badge>
+                        <Badge
+                          variant={
+                            m.status === 'ACCEPTED'
+                              ? 'secondary'
+                              : m.status === 'REQUESTED'
+                              ? 'outline'
+                              : 'destructive'
+                          }
+                          className={`text-[9px] uppercase ${
+                            m.status === 'REQUESTED' ? 'text-amber-600 border-amber-300' : ''
+                          }`}
+                        >
+                          {m.status}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {inst.description && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-2 mb-3">
+                        {inst.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="pt-2 flex items-center gap-2 border-t border-border mt-3">
+                    {isPending ? (
+                      <div className="w-full text-center text-[11px] text-amber-600 py-1 font-medium bg-amber-500/10 rounded">
+                        Pending Admin Approval
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 w-full">
+                        <Link to={`/institutions/${inst.id}`} className="flex-1">
+                          <Button size="sm" variant={isOwnerOrAdmin ? 'default' : 'outline'} className="w-full text-xs">
+                            <Building2 className="mr-1.5 h-3.5 w-3.5" />
+                            {isOwnerOrAdmin ? 'Manage Institution' : 'View Institution'}
+                          </Button>
+                        </Link>
+                        {isOwnerOrAdmin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setManagingInstitution(inst)}
+                            className="text-xs px-2.5"
+                            title="Quick Dialog View"
+                          >
+                            Quick View
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* RECENT CLASSROOMS SECTION */}
+      <div className="space-y-4 pt-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-base font-semibold text-foreground">Recent Classrooms</h2>
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold text-foreground">Recent Classrooms</h2>
             {recentClassrooms.length > 3 && (
               <span className="text-xs text-muted-foreground font-normal">
-                (Showing latest 3 of {recentClassrooms.length})
+                (Latest 3 of {recentClassrooms.length})
               </span>
             )}
           </div>
@@ -351,14 +508,14 @@ export const Dashboard: React.FC = () => {
           )}
         </div>
 
-        {isLoading ? (
+        {isLoadingClassrooms ? (
           <div className="flex justify-center p-8 text-xs text-muted-foreground">
-            Loading recent classrooms...
+            Loading classrooms...
           </div>
         ) : recentClassrooms.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center bg-card">
             <Users className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
-            <p className="text-sm font-medium text-foreground">No recent classrooms found</p>
+            <p className="text-sm font-medium text-foreground">No classrooms found</p>
             <p className="text-xs text-muted-foreground mt-1">
               Create a classroom or join an existing session using a classroom code.
             </p>
@@ -367,6 +524,7 @@ export const Dashboard: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {recentClassrooms.slice(0, 3).map((room) => {
               const isEnded = room.status === 'ENDED';
+              const isInstitution = room.type === 'INSTITUTION' || !!room.institutionId;
 
               return (
                 <div
@@ -374,16 +532,28 @@ export const Dashboard: React.FC = () => {
                   className="flex flex-col justify-between rounded-xl border border-border bg-card p-4 shadow-xs hover:border-primary/30 transition-all"
                 >
                   <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="font-semibold text-sm text-foreground truncate" title={room.name}>{room.name}</span>
-                      <Badge
-                        variant={isEnded ? 'secondary' : 'default'}
-                        className={`text-[10px] uppercase font-bold tracking-wider ${isEnded
-                            ? 'bg-muted text-muted-foreground border-border'
-                            : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
-                          }`}
-                      >
-                        {isEnded ? 'Ended' : 'Active'}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="min-w-0">
+                        <span className="font-semibold text-sm text-foreground truncate block">
+                          {room.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {isInstitution ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary font-medium">
+                              <Building2 className="h-3 w-3" />
+                              {room.institution?.name || 'Institution Class'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                              <Globe className="h-3 w-3" />
+                              Independent
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <Badge variant={isEnded ? 'secondary' : 'default'} className="text-[10px] uppercase">
+                        {room.status}
                       </Badge>
                     </div>
 
@@ -391,38 +561,52 @@ export const Dashboard: React.FC = () => {
                       <span>Code:</span>
                       <span className="font-mono font-medium text-foreground">{room.code}</span>
                       <button
+                        type="button"
                         onClick={() => handleCopy(room.code)}
                         className="text-primary hover:opacity-80 p-0.5"
                         title="Copy code"
                       >
-                        {copiedCode === room.code ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                        {copiedCode === room.code ? (
+                          <Check className="h-3 w-3 text-emerald-600" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
                       </button>
                     </div>
                   </div>
 
-                  {isEnded ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-xs text-muted-foreground cursor-not-allowed opacity-60 bg-muted/30"
-                      disabled
-                    >
-                      Classroom Ended
+                  <Link to={`/classroom/${room.code}`}>
+                    <Button variant="outline" size="sm" className="w-full text-xs" disabled={isEnded}>
+                      <span>{isEnded ? 'Classroom Ended' : 'Enter Classroom'}</span>
+                      {!isEnded && <ArrowRight className="ml-1.5 h-3.5 w-3.5" />}
                     </Button>
-                  ) : (
-                    <Link to={`/classroom/${room.code}`} className="w-full">
-                      <Button variant="outline" size="sm" className="w-full text-xs hover:border-primary/50">
-                        <span>Enter Classroom</span>
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  )}
+                  </Link>
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Dialog Modals */}
+      <JoinInstitutionDialog
+        isOpen={isJoinInstOpen}
+        onClose={() => setIsJoinInstOpen(false)}
+        onSuccess={fetchInstitutions}
+      />
+
+      <CreateInstitutionDialog
+        isOpen={isCreateInstOpen}
+        onClose={() => setIsCreateInstOpen(false)}
+        onSuccess={fetchInstitutions}
+      />
+
+      <ManageInstitutionDialog
+        institution={managingInstitution}
+        isOpen={!!managingInstitution}
+        onClose={() => setManagingInstitution(null)}
+        onRefresh={fetchInstitutions}
+      />
     </div>
   );
 };

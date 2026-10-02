@@ -9,6 +9,7 @@ interface WhiteboardProps {
   classroomCode: string;
   isHost: boolean;
   initialOperations?: WhiteboardOperation[];
+  userId?: string;
 }
 
 export const Whiteboard: React.FC<WhiteboardProps> = ({
@@ -16,6 +17,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
   classroomCode,
   isHost,
   initialOperations,
+  userId,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -56,6 +58,7 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
     classroomCode,
     isHost,
     initialOperations,
+    userId,
   });
 
   return (

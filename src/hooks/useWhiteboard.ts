@@ -7,6 +7,7 @@ interface UseWhiteboardProps {
   classroomCode: string;
   isHost: boolean;
   initialOperations?: WhiteboardOperation[];
+  userId?: string;
 }
 
 export const useWhiteboard = ({
@@ -14,6 +15,7 @@ export const useWhiteboard = ({
   classroomCode,
   isHost: _isHost,
   initialOperations = [],
+  userId,
 }: UseWhiteboardProps) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [tool, setTool] = useState<WhiteboardTool>('pen');
@@ -21,12 +23,19 @@ export const useWhiteboard = ({
   const [strokeWidth, setStrokeWidth] = useState<number>(3);
   const [operations, setOperations] = useState<WhiteboardOperation[]>(initialOperations);
 
+  // In-memory ref to hold operations without triggering 60-120 React re-renders per second during dragging
+  const operationsRef = useRef<WhiteboardOperation[]>(initialOperations);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
 
   // Helper to replay a single operation onto canvas
   const drawOperationOnCanvas = useCallback(
-    (ctx: CanvasRenderingContext2D, op: WhiteboardOperation, width: number, height: number) => {
+    (
+      ctx: CanvasRenderingContext2D,
+      op: WhiteboardOperation,
+      width: number,
+      height: number
+    ) => {
       if (op.type === 'clear') {
         ctx.clearRect(0, 0, width, height);
         return;
@@ -38,7 +47,6 @@ export const useWhiteboard = ({
       ctx.lineJoin = 'round';
 
       // Convert normalized 0..1 coordinates to canvas pixel coordinates
-      // Or if raw coordinates, check if op.x1 <= 1.0 (normalized) or direct
       const isNorm = op.x1 <= 1.05 && op.x2 <= 1.05 && op.y1 <= 1.05 && op.y2 <= 1.05;
       const x1 = isNorm ? op.x1 * width : op.x1;
       const y1 = isNorm ? op.y1 * height : op.y1;
@@ -88,28 +96,28 @@ export const useWhiteboard = ({
     if (!parent) return;
 
     const rect = parent.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-
-    // Only update if dimensions changed
     const targetWidth = Math.floor(rect.width);
     const targetHeight = Math.floor(rect.height);
 
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      redrawAll(operations);
+    if (targetWidth > 0 && targetHeight > 0) {
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        redrawAll(operationsRef.current);
+      }
     }
-  }, [operations, redrawAll]);
+  }, [redrawAll]);
 
   // Sync initial operations
   useEffect(() => {
     if (initialOperations && initialOperations.length > 0) {
+      operationsRef.current = initialOperations;
       setOperations(initialOperations);
       redrawAll(initialOperations);
     }
   }, [initialOperations, redrawAll]);
 
-  // Setup canvas resize listener with ResizeObserver for instant tab display changes
+  // Setup canvas resize listener with ResizeObserver
   useEffect(() => {
     resizeCanvas();
     const t = setTimeout(resizeCanvas, 80);
@@ -138,6 +146,12 @@ export const useWhiteboard = ({
       const data = payload?.data || payload;
       if (data?.x1 === undefined || data?.y1 === undefined) return;
 
+      // Filter out our own stroke echo from server to eliminate delay and duplicate drawing
+      const payloadUserId = payload?.userId || data?.userId;
+      if (userId && payloadUserId && payloadUserId === userId) {
+        return;
+      }
+
       const op: WhiteboardOperation = {
         type: 'draw',
         x1: data.x1,
@@ -148,7 +162,7 @@ export const useWhiteboard = ({
         width: data.width || 3,
       };
 
-      setOperations((prev) => [...prev, op]);
+      operationsRef.current.push(op);
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -162,6 +176,12 @@ export const useWhiteboard = ({
       const data = payload?.data || payload;
       if (data?.x1 === undefined || data?.y1 === undefined) return;
 
+      // Filter out our own erase echo
+      const payloadUserId = payload?.userId || data?.userId;
+      if (userId && payloadUserId && payloadUserId === userId) {
+        return;
+      }
+
       const op: WhiteboardOperation = {
         type: 'erase',
         x1: data.x1,
@@ -171,7 +191,7 @@ export const useWhiteboard = ({
         width: data.width || 10,
       };
 
-      setOperations((prev) => [...prev, op]);
+      operationsRef.current.push(op);
       const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
@@ -182,6 +202,7 @@ export const useWhiteboard = ({
     };
 
     const handleRemoteClear = () => {
+      operationsRef.current = [];
       setOperations([]);
       const canvas = canvasRef.current;
       if (canvas) {
@@ -194,6 +215,7 @@ export const useWhiteboard = ({
 
     const handleRemoteState = (payload: any) => {
       const ops: WhiteboardOperation[] = Array.isArray(payload) ? payload : (payload?.operations || []);
+      operationsRef.current = ops;
       setOperations(ops);
       redrawAll(ops);
     };
@@ -223,22 +245,47 @@ export const useWhiteboard = ({
       socket.off('whiteboard:state', handleRemoteState);
       socket.off('connect', syncState);
     };
-  }, [socket, classroomCode, drawOperationOnCanvas, redrawAll]);
+  }, [socket, classroomCode, userId, drawOperationOnCanvas, redrawAll]);
 
-  // Pointer event handlers
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  // Pointer event handlers with instantaneous zero-latency local drawing
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
 
-    canvas.setPointerCapture(e.pointerId);
-    isDrawingRef.current = true;
+      canvas.setPointerCapture(e.pointerId);
+      isDrawingRef.current = true;
 
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
+      const rect = canvas.getBoundingClientRect();
+      const currentX = (e.clientX - rect.left) / rect.width;
+      const currentY = (e.clientY - rect.top) / rect.height;
 
-    lastPointRef.current = { x, y };
-  }, []);
+      lastPointRef.current = { x: currentX, y: currentY };
+
+      // Draw instantaneous start dot so single clicks / taps register immediately
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.save();
+        ctx.beginPath();
+        const pxX = currentX * canvas.width;
+        const pxY = currentY * canvas.height;
+        const radius = Math.max(1, (strokeWidth * (tool === 'eraser' ? 3.5 : 1)) / 2);
+
+        if (tool === 'pen') {
+          ctx.fillStyle = color;
+          ctx.globalCompositeOperation = 'source-over';
+        } else {
+          ctx.fillStyle = '#ffffff';
+          ctx.globalCompositeOperation = 'destination-out';
+        }
+
+        ctx.arc(pxX, pxY, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    },
+    [color, strokeWidth, tool]
+  );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -252,6 +299,11 @@ export const useWhiteboard = ({
 
       const p1 = lastPointRef.current;
       const p2 = { x: currentX, y: currentY };
+
+      // Ignore zero-distance movement
+      const dx = (p2.x - p1.x) * rect.width;
+      const dy = (p2.y - p1.y) * rect.height;
+      if (dx * dx + dy * dy < 0.5) return;
 
       const canvasWidth = canvas.width;
       const canvasHeight = canvas.height;
@@ -268,54 +320,92 @@ export const useWhiteboard = ({
         };
 
         const op: WhiteboardOperation = { type: 'draw', ...drawData };
-        setOperations((prev) => [...prev, op]);
-        if (ctx) drawOperationOnCanvas(ctx, op, canvasWidth, canvasHeight);
+        // Store in ref to avoid choking React with 100+ re-renders per second
+        operationsRef.current.push(op);
+
+        // Instantaneous local render (0ms lag)
+        if (ctx) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.moveTo(p1.x * canvasWidth, p1.y * canvasHeight);
+          ctx.lineTo(p2.x * canvasWidth, p2.y * canvasHeight);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = strokeWidth;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.stroke();
+          ctx.restore();
+        }
 
         if (socket && socket.connected) {
           socket.emit('whiteboard:draw', {
             classroomCode,
+            userId,
             ...drawData,
-            data: drawData,
+            data: { ...drawData, userId },
           });
         }
       } else if (tool === 'eraser') {
+        const eraseWidth = strokeWidth * 3.5;
         const eraseData: EraseData = {
           x1: p1.x,
           y1: p1.y,
           x2: p2.x,
           y2: p2.y,
-          width: strokeWidth * 3, // slightly wider eraser
+          width: eraseWidth,
         };
 
         const op: WhiteboardOperation = { type: 'erase', ...eraseData };
-        setOperations((prev) => [...prev, op]);
-        if (ctx) drawOperationOnCanvas(ctx, op, canvasWidth, canvasHeight);
+        operationsRef.current.push(op);
+
+        // Instantaneous local erase (0ms lag)
+        if (ctx) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.moveTo(p1.x * canvasWidth, p1.y * canvasHeight);
+          ctx.lineTo(p2.x * canvasWidth, p2.y * canvasHeight);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = eraseWidth;
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.stroke();
+          ctx.restore();
+        }
 
         if (socket && socket.connected) {
           socket.emit('whiteboard:erase', {
             classroomCode,
+            userId,
             ...eraseData,
-            data: eraseData,
+            data: { ...eraseData, userId },
           });
         }
       }
 
       lastPointRef.current = p2;
     },
-    [tool, color, strokeWidth, socket, classroomCode, drawOperationOnCanvas]
+    [tool, color, strokeWidth, socket, classroomCode, userId]
   );
 
-  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    isDrawingRef.current = false;
-    lastPointRef.current = null;
-    try {
-      if (canvasRef.current?.hasPointerCapture(e.pointerId)) {
-        canvasRef.current.releasePointerCapture(e.pointerId);
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      isDrawingRef.current = false;
+      lastPointRef.current = null;
+      try {
+        if (canvasRef.current?.hasPointerCapture(e.pointerId)) {
+          canvasRef.current.releasePointerCapture(e.pointerId);
+        }
+      } catch {
+        // Ignore
       }
-    } catch {
-      // Ignore
-    }
-  }, []);
+
+      // Synchronize operations array to React state on stroke completion (single clean re-render)
+      setOperations([...operationsRef.current]);
+    },
+    []
+  );
 
   const clearWhiteboard = useCallback(() => {
     const canvas = canvasRef.current;
@@ -326,7 +416,9 @@ export const useWhiteboard = ({
       }
     }
 
+    operationsRef.current = [];
     setOperations([]);
+
     if (socket && socket.connected) {
       socket.emit('whiteboard:clear', { classroomCode });
     }

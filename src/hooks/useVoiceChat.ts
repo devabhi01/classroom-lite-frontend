@@ -46,13 +46,32 @@ export const useVoiceChat = ({
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
-  // Helper to attach local stream tracks to a peer connection
+  // Helper to attach local stream tracks to a peer connection with Full HD adaptive encoding
   const addLocalTracksToPc = (pc: RTCPeerConnection, stream: MediaStream) => {
     const existingSenders = pc.getSenders();
     stream.getTracks().forEach((track) => {
       const alreadyAdded = existingSenders.some((s) => s.track?.id === track.id);
       if (!alreadyAdded) {
-        pc.addTrack(track, stream);
+        const sender = pc.addTrack(track, stream);
+        // Optimize video encoding parameters for Full HD with automatic network adaptation
+        if (track.kind === 'video' && sender && sender.getParameters) {
+          try {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            // Target up to 2.5 Mbps for 1080p Full HD
+            params.encodings[0].maxBitrate = 2500000;
+            // WebRTC degradation preference: 'balanced' automatically downscales resolution & framerate
+            // under network congestion/low bandwidth, and automatically restores 1080p when network stabilizes
+            params.degradationPreference = 'balanced';
+            sender.setParameters(params).catch((err) => {
+              console.warn('Could not set video sender parameters:', err);
+            });
+          } catch (e) {
+            console.warn('Failed to configure video sender parameters:', e);
+          }
+        }
       }
     });
   };
@@ -174,7 +193,12 @@ export const useVoiceChat = ({
               autoGainControl: true,
             },
             video: withVideo
-              ? { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } }
+              ? {
+                  width: { ideal: 1920, max: 1920, min: 640 },
+                  height: { ideal: 1080, max: 1080, min: 360 },
+                  frameRate: { ideal: 30, max: 30, min: 15 },
+                  facingMode: 'user',
+                }
               : false,
           });
         } catch (mediaErr: any) {
@@ -266,9 +290,45 @@ export const useVoiceChat = ({
   }, [audioEnabled, videoEnabled, socket, classroomCode, userId]);
 
   // Toggle camera
-  const toggleVideo = useCallback(() => {
+  const toggleVideo = useCallback(async () => {
     if (!localStreamRef.current) return;
     const videoTracks = localStreamRef.current.getVideoTracks();
+
+    // If no video track exists yet (joined audio-only), acquire 1080p camera stream
+    if (videoTracks.length === 0) {
+      try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1920, max: 1920, min: 640 },
+            height: { ideal: 1080, max: 1080, min: 360 },
+            frameRate: { ideal: 30, max: 30, min: 15 },
+            facingMode: 'user',
+          },
+        });
+        const newTrack = videoStream.getVideoTracks()[0];
+        if (newTrack) {
+          localStreamRef.current.addTrack(newTrack);
+          // Attach track to all peer connections
+          peerConnectionsRef.current.forEach((pc) => {
+            addLocalTracksToPc(pc, localStreamRef.current!);
+          });
+          setVideoEnabled(true);
+          if (socket?.connected) {
+            socket.emit('voicechat:mute-state', {
+              classroomCode,
+              userId,
+              audioMuted: !audioEnabled,
+              videoMuted: false,
+            });
+          }
+          toast.success('Camera activated in Full HD');
+        }
+      } catch (err) {
+        toast.error('Could not access camera');
+      }
+      return;
+    }
+
     const newState = !videoEnabled;
     videoTracks.forEach((t) => (t.enabled = newState));
     setVideoEnabled(newState);

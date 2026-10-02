@@ -4,7 +4,7 @@ import { Socket } from 'socket.io-client';
 import api from '@/lib/api';
 import { connectSocket, disconnectSocket } from '@/lib/socket';
 import { toast } from '@/components/ui/Toast';
-import { Classroom, WorkspaceTab, TimeLimitInfo } from '@/types/classroom';
+import { Classroom, WorkspaceTab } from '@/types/classroom';
 import { Participant, JoinRequest } from '@/types/participant';
 import { PdfState } from '@/types/pdf';
 import { WhiteboardOperation } from '@/types/whiteboard';
@@ -28,27 +28,8 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 2-hour session limit and 5-min advance warning states
-  const [timeLimit, setTimeLimit] = useState<TimeLimitInfo | null>(null);
-  const [timeWarning, setTimeWarning] = useState<string | null>(null);
-  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number | null>(null);
-
   const socketRef = useRef<Socket | null>(null);
   const isHost = classroom?.hostId === currentUser?.id;
-
-  // Active countdown timer when 5-min warning is active or remaining seconds known
-  useEffect(() => {
-    if (timeRemainingSeconds === null || timeRemainingSeconds <= 0) return;
-    const interval = setInterval(() => {
-      setTimeRemainingSeconds((prev) => {
-        if (prev === null || prev <= 1) {
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timeRemainingSeconds !== null && timeRemainingSeconds > 0]);
 
   // 1. Fetch classroom details via REST API
   const fetchClassroom = useCallback(async () => {
@@ -125,116 +106,9 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     }
   }, [classroomCode, currentUser?.id]);
 
-  const enableDemoMode = useCallback(() => {
-    const isStudentUser = currentUser?.role === 'STUDENT';
-    const hostId = isStudentUser ? 'demo_teacher_host' : (currentUser?.id || 'demo_host_101');
-
-    const demoRoom: Classroom = {
-      id: 'demo_' + classroomCode,
-      name: classroomCode === 'DEMO101' ? 'Distributed Systems 101 (Demo Class)' : `Classroom (${classroomCode})`,
-      code: classroomCode,
-      hostId,
-      status: 'ACTIVE',
-    };
-    setClassroom(demoRoom);
-
-    // Populate realistic participants for demo
-    const mockParticipants: Participant[] = isStudentUser
-      ? [
-          {
-            userId: 'demo_teacher_host',
-            name: 'Prof. Abhishek',
-            role: 'HOST',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: currentUser?.id || 'demo_student_me',
-            name: currentUser?.name || 'Alex Kumar',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_sarah',
-            name: 'Sarah Connor',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_dev',
-            name: 'Dev Patel',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_priya',
-            name: 'Priya Sharma',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-        ]
-      : [
-          {
-            userId: currentUser?.id || 'demo_host_101',
-            name: currentUser?.name || 'Prof. Abhishek',
-            role: 'HOST',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_alex',
-            name: 'Alex Kumar',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_sarah',
-            name: 'Sarah Connor',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-          {
-            userId: 'demo_student_dev',
-            name: 'Dev Patel',
-            role: 'STUDENT',
-            status: 'ACCEPTED',
-          },
-        ];
-
-    setParticipants(mockParticipants);
-
-    // Initial mock PDF presentation
-    setInitialPdf({
-      fileName: 'Distributed-Systems-Architecture.pdf',
-      fileUrl: '',
-      totalPages: 10,
-      currentPage: 1,
-    });
-
-    // Initial mock whiteboard welcoming strokes
-    setInitialWhiteboard([
-      { type: 'draw', x1: 0.2, y1: 0.25, x2: 0.8, y2: 0.25, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.2, y1: 0.5, x2: 0.8, y2: 0.5, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.2, y1: 0.25, x2: 0.2, y2: 0.5, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.8, y1: 0.25, x2: 0.8, y2: 0.5, color: '#2563eb', width: 4 },
-      { type: 'draw', x1: 0.5, y1: 0.5, x2: 0.5, y2: 0.75, color: '#dc2626', width: 3 },
-    ]);
-
-    setError(null);
-    toast.info(
-      isStudentUser
-        ? 'Welcome to Student Demo Mode! Viewing Prof. Abhishek\'s class.'
-        : 'Welcome to Instructor Demo Mode! Whiteboard, PDF, and Screen Share are ready.',
-      'Demo Classroom'
-    );
-  }, [classroomCode, currentUser]);
-
   useEffect(() => {
-    if (classroomCode === 'DEMO101') {
-      enableDemoMode();
-      setLoading(false);
-      return;
-    }
     fetchClassroom();
-  }, [classroomCode, enableDemoMode, fetchClassroom]);
+  }, [classroomCode, fetchClassroom]);
 
   // 2. Connect Socket.IO and establish real-time listeners
   useEffect(() => {
@@ -288,18 +162,6 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
       if (state.whiteboard && Array.isArray(state.whiteboard)) {
         setInitialWhiteboard(state.whiteboard);
       }
-      if (state.timeLimit) {
-        setTimeLimit(state.timeLimit);
-        if (typeof state.timeLimit.remainingSeconds === 'number') {
-          setTimeRemainingSeconds(state.timeLimit.remainingSeconds);
-        }
-        if (state.timeLimit.isWarning) {
-          setTimeWarning(
-            state.timeLimit.warningMessage ||
-              'Classroom exceeding time limit, Please create another after it ended.',
-          );
-        }
-      }
     };
 
     // Participants updates
@@ -347,48 +209,13 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
       toast.info(`Join request from ${joinReq.name}`, 'New Student Request');
     };
 
-    // Time Limit Warning (5 mins before 2-hour completion)
-    const handleTimeLimitWarning = (data: any) => {
-      const remaining = data?.remainingSeconds ?? 300;
-      const msg =
-        data?.message || 'Classroom exceeding time limit, Please create another after it ended.';
-      setTimeRemainingSeconds(remaining);
-      setTimeWarning(msg);
-      toast.warning(msg, 'Classroom Time Limit Warning');
-    };
-
     // Classroom Ended
-    const handleClassroomEnded = (payload?: any) => {
-      const reason = payload?.reason;
-      let msg = 'The host has ended this classroom session.';
-      if (reason === 'TIME_LIMIT_EXCEEDED') {
-        msg =
-          payload?.message ||
-          'Classroom exceeding time limit, Please create another after it ended.';
-      } else if (reason === 'INACTIVITY') {
-        msg =
-          payload?.message ||
-          'Classroom was automatically closed due to 5 minutes of inactivity or 0 active participants.';
-      } else if (payload?.message) {
-        msg = payload.message;
-      }
-      toast.warning(msg, 'Classroom Ended');
+    const handleClassroomEnded = () => {
+      toast.warning('The host has ended this classroom session.', 'Classroom Ended');
       setClassroom((prev) => (prev ? { ...prev, status: 'ENDED' } : null));
-      try {
-        const stored = localStorage.getItem('tdp_recent_classrooms');
-        if (stored) {
-          const list = JSON.parse(stored);
-          if (Array.isArray(list)) {
-            const updated = list.map((r: any) =>
-              r.code === classroomCode ? { ...r, status: 'ENDED' } : r,
-            );
-            localStorage.setItem('tdp_recent_classrooms', JSON.stringify(updated));
-          }
-        }
-      } catch {}
       setTimeout(() => {
         navigate('/dashboard');
-      }, 3000);
+      }, 2500);
     };
 
     // Tab Change synchronization
@@ -427,7 +254,6 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     s.on('classroom:user-left', handleUserLeft);
     s.on('classroom:participant-updated', handleParticipantUpdated);
     s.on('classroom:request:new', handleNewRequest);
-    s.on('classroom:time-limit-warning', handleTimeLimitWarning);
     s.on('classroom:ended', handleClassroomEnded);
     s.on('classroom:tab-change', handleTabChange);
     s.on('pdf:shared', handlePdfShared);
@@ -453,7 +279,6 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
         s.off('classroom:user-left', handleUserLeft);
         s.off('classroom:participant-updated', handleParticipantUpdated);
         s.off('classroom:request:new', handleNewRequest);
-        s.off('classroom:time-limit-warning', handleTimeLimitWarning);
         s.off('classroom:ended', handleClassroomEnded);
         s.off('classroom:tab-change', handleTabChange);
         s.off('pdf:shared', handlePdfShared);
@@ -466,7 +291,7 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
 
   // Periodic poll for host pending requests (every 3 seconds)
   useEffect(() => {
-    if (!isHost || classroomCode === 'DEMO101') return;
+    if (!isHost) return;
 
     const interval = setInterval(async () => {
       try {
@@ -542,18 +367,6 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
       if (socket && socket.connected) {
         socket.emit('classroom:ended', { classroomCode });
       }
-      try {
-        const stored = localStorage.getItem('tdp_recent_classrooms');
-        if (stored) {
-          const list = JSON.parse(stored);
-          if (Array.isArray(list)) {
-            const updated = list.map((r: any) =>
-              r.code === classroomCode ? { ...r, status: 'ENDED' } : r,
-            );
-            localStorage.setItem('tdp_recent_classrooms', JSON.stringify(updated));
-          }
-        }
-      } catch {}
       disconnectSocket();
       toast.info('Classroom ended successfully');
       navigate('/dashboard');
@@ -582,15 +395,11 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     initialWhiteboard,
     loading,
     error,
-    timeLimit,
-    timeWarning,
-    timeRemainingSeconds,
     switchTab,
     acceptJoinRequest,
     rejectJoinRequest,
     endClassroom,
     leaveClassroom,
-    enableDemoMode,
     refreshClassroom: fetchClassroom,
   };
 };

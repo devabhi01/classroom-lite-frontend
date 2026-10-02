@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, AlertCircle, PanelLeftOpen, AlertTriangle, Clock } from 'lucide-react';
+import { Loader2, AlertCircle, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useClassroom } from '@/hooks/useClassroom';
@@ -36,14 +36,11 @@ export const Classroom: React.FC = () => {
     initialWhiteboard,
     loading,
     error,
-    timeWarning,
-    timeRemainingSeconds,
     switchTab,
     acceptJoinRequest,
     rejectJoinRequest,
     endClassroom,
     leaveClassroom,
-    enableDemoMode,
     refreshClassroom,
   } = useClassroom({
     classroomCode,
@@ -142,9 +139,9 @@ export const Classroom: React.FC = () => {
           <p className="text-sm text-muted-foreground">
             {error || 'Unable to join classroom. The room may have ended or does not exist.'}
           </p>
-          {isServerOffline && !user && (
+          {isServerOffline && (
             <p className="text-xs text-muted-foreground bg-muted p-2 rounded border border-border">
-              The backend server is currently offline. You can start the backend, or explore features in Standalone Demo Mode.
+              The backend server at <code className="font-mono text-primary">http://localhost:3000</code> is currently offline. Please ensure the backend is running.
             </p>
           )}
           <div className="flex flex-col sm:flex-row justify-center gap-2 pt-2">
@@ -154,11 +151,6 @@ export const Classroom: React.FC = () => {
             <Button variant="secondary" size="sm" onClick={refreshClassroom}>
               Retry Connection
             </Button>
-            {!user && (
-              <Button size="sm" onClick={enableDemoMode} className="bg-primary">
-                Continue in Demo Mode
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -173,32 +165,14 @@ export const Classroom: React.FC = () => {
         classroomCode={classroom.code}
         participantCount={participants.length}
         isHost={isHost}
+        createdAt={classroom.createdAt}
+        isEnded={classroom.status === 'ENDED'}
         onLeave={leaveClassroom}
         onEndClassroom={isHost ? endClassroom : undefined}
         onToggleParticipants={toggleParticipants}
         isParticipantOpen={isParticipantPanelOpen}
         isMobileParticipantOpen={mobileParticipantsOpen}
       />
-
-      {/* 2-Hour Time Limit Warning Banner (triggers 5 mins before completion) */}
-      {((timeRemainingSeconds !== null && timeRemainingSeconds <= 300) || timeWarning) && (
-        <div className="flex items-center justify-between px-4 py-2.5 bg-amber-500/15 border-b border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs sm:text-sm font-semibold z-30 shadow-sm animate-pulse">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <span>
-              {timeWarning || 'Classroom exceeding time limit, Please create another after it ended.'}
-            </span>
-          </div>
-          {timeRemainingSeconds !== null && (
-            <div className="flex items-center gap-1.5 font-mono font-bold bg-amber-500/25 px-2.5 py-1 rounded text-amber-800 dark:text-amber-200">
-              <Clock className="h-3.5 w-3.5" />
-              <span>
-                {Math.floor(timeRemainingSeconds / 60)}:{(timeRemainingSeconds % 60) < 10 ? '0' : ''}{timeRemainingSeconds % 60}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* 2. Main Middle Section: Sidebar + Workspace */}
       <div className="relative flex flex-1 overflow-hidden">
@@ -289,6 +263,7 @@ export const Classroom: React.FC = () => {
               classroomCode={classroomCode}
               isHost={isHost}
               initialOperations={initialWhiteboard}
+              userId={user?.id}
             />
           </div>
 

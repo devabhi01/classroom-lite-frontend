@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { LogIn, AlertCircle, Mail } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card';
@@ -17,8 +17,6 @@ export const Login: React.FC = () => {
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [requiresVerification, setRequiresVerification] = useState(false);
-  const [unverifiedEmail, setUnverifiedEmail] = useState('');
 
   const validate = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
@@ -46,19 +44,20 @@ export const Login: React.FC = () => {
     try {
       setIsLoading(true);
       setErrors({});
-      setRequiresVerification(false);
       await login({ email, password });
       navigate(redirectPath);
     } catch (err: any) {
-      if (err.requiresVerification || (err.message && err.message.toLowerCase().includes('verify your email'))) {
-        setRequiresVerification(true);
-        setUnverifiedEmail(err.email || email);
-      }
       setErrors({ general: err.message || 'Invalid email or password' });
     } finally {
       setIsLoading(false);
     }
   };
+
+  const isServerOffline = errors.general && (
+    errors.general.toLowerCase().includes('connect') ||
+    errors.general.toLowerCase().includes('server') ||
+    errors.general.toLowerCase().includes('network')
+  );
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center p-4">
@@ -78,25 +77,26 @@ export const Login: React.FC = () => {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               {errors.general && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-2">
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-semibold block">{errors.general}</span>
+                      {errors.general.toLowerCase().includes('verif') && (
+                        <Link
+                          to={`/verify-email?email=${encodeURIComponent(email)}`}
+                          className="mt-1.5 inline-block font-semibold text-primary underline"
+                        >
+                          Click here to enter your 6-digit verification code &rarr;
+                        </Link>
+                      )}
+                      {isServerOffline && (
+                        <p className="mt-1 text-muted-foreground">
+                          Cannot connect to the server at <code className="font-mono bg-muted px-1 py-0.5 rounded">http://localhost:3000</code>. Please ensure the backend is running.
+                        </p>
+                      )}
                     </div>
                   </div>
-                  {requiresVerification && (
-                    <div className="pt-1.5 border-t border-destructive/20 flex items-center justify-between">
-                      <span className="text-[11px] text-destructive/90">Haven&apos;t confirmed yet?</span>
-                      <Link
-                        to={`/verify-email?email=${encodeURIComponent(unverifiedEmail || email)}`}
-                        className="inline-flex items-center gap-1 font-semibold text-primary bg-primary/10 hover:bg-primary/20 px-2.5 py-1 rounded transition-colors"
-                      >
-                        <Mail className="h-3 w-3" />
-                        <span>Verify Email Now &rarr;</span>
-                      </Link>
-                    </div>
-                  )}
                 </div>
               )}
 

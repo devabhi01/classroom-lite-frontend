@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Socket } from 'socket.io-client';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
-import api from '@/lib/api';
+import api, { getApiBaseUrl } from '@/lib/api';
 import { PdfState } from '@/types/pdf';
 import { toast } from '@/components/ui/Toast';
 
@@ -27,11 +27,16 @@ export const usePdf = ({
   const [zoom, setZoom] = useState<number>(1.0);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
 
+  // Student following & sync state
+  const [hostCurrentPage, setHostCurrentPage] = useState<number>(initialPdf?.currentPage || 1);
+  const [isFollowingHost, setIsFollowingHost] = useState<boolean>(true);
+  const isFollowingHostRef = useRef<boolean>(true);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<any>(null);
 
-  // Load PDF Document into memory
-  const loadPdfDocument = useCallback(async (url: string) => {
+  // Load PDF Document into memory reliably from ArrayBuffer, File, Blob, or URL string
+  const loadPdfDocument = useCallback(async (source: File | Blob | ArrayBuffer | string) => {
     try {
       setLoading(true);
       if (renderTaskRef.current) {
@@ -40,25 +45,56 @@ export const usePdf = ({
         } catch {}
       }
 
-      let doc;
-      if (url.startsWith('blob:') || url.startsWith('data:')) {
-        const loadingTask = pdfjsLib.getDocument({ url });
-        doc = await loadingTask.promise;
-      } else {
-        // Fetch array buffer directly to avoid Web Worker cross-origin network restrictions
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP error ${response.status} fetching PDF file`);
+      let arrayBuffer: ArrayBuffer;
+      if (source instanceof ArrayBuffer) {
+        arrayBuffer = source;
+      } else if (source instanceof Blob) {
+        arrayBuffer = await source.arrayBuffer();
+      } else if (typeof source === 'string') {
+        let fetchUrl = source;
+        if (fetchUrl.startsWith('/uploads')) {
+          fetchUrl = `${getApiBaseUrl()}${fetchUrl}`;
         }
-        const arrayBuffer = await response.arrayBuffer();
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-        doc = await loadingTask.promise;
+
+        try {
+          const response = await fetch(fetchUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP error ${response.status} fetching PDF file`);
+          }
+          arrayBuffer = await response.arrayBuffer();
+        } catch (fetchErr: any) {
+          // If fetch fails on absolute URL, fallback to getApiBaseUrl if it's an uploaded PDF
+          if (fetchUrl.includes('/uploads/pdf/')) {
+            const rel = '/uploads/pdf/' + fetchUrl.split('/uploads/pdf/')[1];
+            const fallbackRes = await fetch(`${getApiBaseUrl()}${rel}`);
+            if (!fallbackRes.ok) throw fetchErr;
+            arrayBuffer = await fallbackRes.arrayBuffer();
+          } else {
+            throw fetchErr;
+          }
+        }
+      } else {
+        throw new Error('Unsupported PDF source');
       }
 
+      // Clone arrayBuffer slice because PDF.js transfers the buffer to the web worker
+      const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer.slice(0) });
+      const doc = await loadingTask.promise;
+
       setPdfDoc(doc);
+
+      // Always update totalPages from the verified PDF document
+      setPdfState((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          totalPages: doc.numPages,
+        };
+      });
+
       return doc.numPages;
     } catch (err: any) {
-      console.warn('Could not load PDF binary from URL:', err?.message || err);
+      console.warn('Could not load PDF binary:', err?.message || err);
       toast.error('Failed to load PDF: ' + (err?.message || 'Could not fetch file'));
       return null;
     } finally {
@@ -112,6 +148,7 @@ export const usePdf = ({
   useEffect(() => {
     if (initialPdf) {
       setPdfState(initialPdf);
+      setHostCurrentPage(initialPdf.currentPage || 1);
       if (initialPdf.fileUrl && !initialPdf.fileUrl.startsWith('blob:')) {
         loadPdfDocument(initialPdf.fileUrl);
       }
@@ -148,6 +185,9 @@ export const usePdf = ({
 
       if (incomingPdf?.fileName) {
         setPdfState(incomingPdf);
+        setHostCurrentPage(incomingPdf.currentPage || 1);
+        setIsFollowingHost(true);
+        isFollowingHostRef.current = true;
         if (!isHost) {
           toast.info(`Host shared: ${incomingPdf.fileName}`, 'New PDF Presentation');
         }
@@ -168,7 +208,15 @@ export const usePdf = ({
         newPage = payload.page;
       }
 
-      setPdfState((prev) => (prev ? { ...prev, currentPage: newPage } : null));
+      setHostCurrentPage(newPage);
+      setPdfState((prev) => {
+        if (!prev) return null;
+        // If following host, or if host themselves, follow the change
+        if (isFollowingHostRef.current || isHost) {
+          return { ...prev, currentPage: newPage };
+        }
+        return prev;
+      });
     };
 
     const handlePdfClosed = () => {
@@ -204,10 +252,14 @@ export const usePdf = ({
 
       try {
         setLoading(true);
-        const objectUrl = URL.createObjectURL(file);
-        const totalPages = (await loadPdfDocument(objectUrl)) || 1;
 
-        // Full local state with blob URL for the host (instant preview)
+        // Read ArrayBuffer directly on main thread to guarantee PDF.js worker never fails fetch
+        const arrayBuffer = await file.arrayBuffer();
+        const totalPages = (await loadPdfDocument(arrayBuffer)) || 1;
+
+        const objectUrl = URL.createObjectURL(file);
+
+        // Full local state with instant verified page count
         const newPdf: PdfState = {
           fileName: file.name,
           fileUrl: objectUrl,
@@ -217,6 +269,8 @@ export const usePdf = ({
         };
 
         setPdfState(newPdf);
+        setHostCurrentPage(1);
+        setIsFollowingHost(true);
         setZoom(1.0);
 
         // Upload the PDF to the backend so all students can download and render the actual presentation!
@@ -228,6 +282,8 @@ export const usePdf = ({
           const resData = uploadRes.data?.data || uploadRes.data;
           if (resData?.fileUrl) {
             publicUrl = resData.fileUrl;
+          } else if (resData?.relativePath) {
+            publicUrl = `${getApiBaseUrl()}${resData.relativePath}`;
           }
         } catch (uploadErr: any) {
           console.error('PDF upload to server failed:', uploadErr);
@@ -235,7 +291,7 @@ export const usePdf = ({
         }
 
         if (socket && socket.connected) {
-          // Broadcast to classroom participants with the public URL
+          // Broadcast to classroom participants with the public URL and verified totalPages
           socket.emit('pdf:share', {
             classroomCode,
             fileName: file.name,
@@ -254,26 +310,39 @@ export const usePdf = ({
     [isHost, socket, classroomCode, loadPdfDocument]
   );
 
-  // Host action: change page
+  // Change page: host broadcasts; students can browse and re-sync
   const changePage = useCallback(
     (page: number) => {
       if (!pdfState) return;
-      if (!isHost) {
-        toast.warning('Students cannot change pages. Following host view.');
-        return;
-      }
 
       if (page < 1 || page > pdfState.totalPages) return;
 
-      setPdfState((prev) => (prev ? { ...prev, currentPage: page } : null));
+      if (isHost) {
+        setPdfState((prev) => (prev ? { ...prev, currentPage: page } : null));
+        setHostCurrentPage(page);
 
-      if (socket && socket.connected) {
-        // ✅ Backend PageChangeDto expects { page } not { currentPage }
-        socket.emit('pdf:page-change', { classroomCode, page });
+        if (socket && socket.connected) {
+          socket.emit('pdf:page-change', { classroomCode, page });
+        }
+      } else {
+        // Students can navigate independently
+        setPdfState((prev) => (prev ? { ...prev, currentPage: page } : null));
+        const following = page === hostCurrentPage;
+        setIsFollowingHost(following);
+        isFollowingHostRef.current = following;
       }
     },
-    [pdfState, isHost, socket, classroomCode]
+    [pdfState, isHost, socket, classroomCode, hostCurrentPage]
   );
+
+  // Student action: snap back to host's slide
+  const syncWithHost = useCallback(() => {
+    if (!pdfState || isHost) return;
+    setPdfState((prev) => (prev ? { ...prev, currentPage: hostCurrentPage } : null));
+    setIsFollowingHost(true);
+    isFollowingHostRef.current = true;
+    toast.info(`Synced to host slide (${hostCurrentPage})`);
+  }, [pdfState, isHost, hostCurrentPage]);
 
   const nextPage = useCallback(() => {
     if (pdfState && pdfState.currentPage < pdfState.totalPages) {
@@ -288,11 +357,11 @@ export const usePdf = ({
   }, [pdfState, changePage]);
 
   const zoomIn = useCallback(() => {
-    setZoom((z) => Math.min(2.5, +(z + 0.2).toFixed(1)));
+    setZoom((z) => Math.min(3.0, +(z + 0.25).toFixed(2)));
   }, []);
 
   const zoomOut = useCallback(() => {
-    setZoom((z) => Math.max(0.5, +(z - 0.2).toFixed(1)));
+    setZoom((z) => Math.max(0.5, +(z - 0.25).toFixed(2)));
   }, []);
 
   const resetZoom = useCallback(() => {
@@ -321,6 +390,10 @@ export const usePdf = ({
     zoom,
     canvasRef,
     pdfDoc,
+    hostCurrentPage,
+    isFollowingHost,
+    syncWithHost,
+    loadPdfDocument,
     shareLocalPdf,
     changePage,
     nextPage,

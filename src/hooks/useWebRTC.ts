@@ -69,6 +69,9 @@ export const useWebRTC = ({
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: 'monitor',
+          width: { ideal: 1920, max: 2560 },
+          height: { ideal: 1080, max: 1440 },
+          frameRate: { ideal: 30, max: 60 },
         },
         audio: false,
       });
@@ -211,7 +214,20 @@ export const useWebRTC = ({
 
         // Add screen tracks to peer connection
         localStreamRef.current.getTracks().forEach((track) => {
-          pc.addTrack(track, localStreamRef.current!);
+          const sender = pc.addTrack(track, localStreamRef.current!);
+          if (track.kind === 'video' && sender && sender.getParameters) {
+            try {
+              const params = sender.getParameters();
+              if (!params.encodings || params.encodings.length === 0) {
+                params.encodings = [{}];
+              }
+              params.encodings[0].maxBitrate = 3000000;
+              params.degradationPreference = 'maintain-resolution';
+              sender.setParameters(params).catch(() => {});
+            } catch (e) {
+              // Ignore parameter unsupported errors
+            }
+          }
         });
 
         pc.onicecandidate = (event) => {

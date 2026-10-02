@@ -83,9 +83,10 @@ export const RecentClassrooms: React.FC = () => {
       if (rooms.length > 0) {
         setClassrooms(rooms);
         localStorage.setItem(cacheKey, JSON.stringify(rooms));
+        localStorage.setItem('tdp_recent_classrooms', JSON.stringify(rooms));
       } else {
         // 3. Fallback to cached localStorage
-        const cached = localStorage.getItem(cacheKey);
+        const cached = localStorage.getItem(cacheKey) || localStorage.getItem('tdp_recent_classrooms');
         if (cached) {
           setClassrooms(JSON.parse(cached));
         }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Menu,
@@ -8,10 +8,8 @@ import {
   PlusCircle,
   LogIn,
   LayoutDashboard,
-  Sparkles,
-  ChevronDown,
-  GraduationCap,
-  Presentation,
+  Building2,
+  BarChart3,
 } from 'lucide-react';
 import { Logo } from '@/components/ui/Logo';
 import { Button } from '@/components/ui/Button';
@@ -19,33 +17,10 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useAuth } from '@/hooks/useAuth';
 
 export const Navbar: React.FC = () => {
-  const { user, isAuthenticated, logout, loginAsDemo } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [demoDropdownOpen, setDemoDropdownOpen] = useState(false);
-  const demoDropdownRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (demoDropdownRef.current && !demoDropdownRef.current.contains(event.target as Node)) {
-        setDemoDropdownOpen(false);
-      }
-    };
-    if (demoDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [demoDropdownOpen]);
-
-  const handleSelectDemo = (role: 'STUDENT' | 'HOST') => {
-    loginAsDemo(role);
-    setDemoDropdownOpen(false);
-    setMobileMenuOpen(false);
-    navigate('/classroom/DEMO101');
-  };
 
   const handleLogout = () => {
     logout();
@@ -80,73 +55,6 @@ export const Navbar: React.FC = () => {
             About
           </a>
 
-          {/* Try Demo Dropdown (Only visible when NOT logged in) */}
-          {!isAuthenticated && (
-            <div className="relative" ref={demoDropdownRef}>
-              <button
-                type="button"
-                onClick={() => setDemoDropdownOpen((prev) => !prev)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus:outline-none"
-                aria-expanded={demoDropdownOpen}
-                aria-haspopup="true"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <span>Try Demo</span>
-                <ChevronDown
-                  className={`h-3 w-3 transition-transform duration-200 ${
-                    demoDropdownOpen ? 'rotate-180 text-primary' : 'text-muted-foreground'
-                  }`}
-                />
-              </button>
-
-              {demoDropdownOpen && (
-                <div className="absolute left-0 mt-2 w-64 rounded-xl border border-border bg-card p-1.5 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 z-50">
-                  <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Interactive Demo Mode
-                  </div>
-
-                  {/* For Student */}
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('STUDENT')}
-                    className="flex w-full items-start gap-2.5 rounded-lg p-2 text-left hover:bg-muted/80 transition-colors group cursor-pointer"
-                  >
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-500/10 text-blue-600 group-hover:bg-blue-500/20 transition-colors">
-                      <GraduationCap className="h-4 w-4" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
-                        For Student
-                      </span>
-                      <span className="text-[11px] text-muted-foreground leading-snug">
-                        Synchronized presentation, whiteboard, & full-screen
-                      </span>
-                    </div>
-                  </button>
-
-                  {/* For Teacher */}
-                  <button
-                    type="button"
-                    onClick={() => handleSelectDemo('HOST')}
-                    className="flex w-full items-start gap-2.5 rounded-lg p-2 text-left hover:bg-muted/80 transition-colors group cursor-pointer mt-0.5"
-                  >
-                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary group-hover:bg-primary/20 transition-colors">
-                      <Presentation className="h-4 w-4" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
-                        For Teacher
-                      </span>
-                      <span className="text-[11px] text-muted-foreground leading-snug">
-                        Host controls, slide sharing, annotations, & room management
-                      </span>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
           {isAuthenticated && (
             <>
               <Link
@@ -156,6 +64,24 @@ export const Navbar: React.FC = () => {
                 }`}
               >
                 Dashboard
+              </Link>
+              <Link
+                to="/institutions"
+                className={`transition-colors hover:text-primary ${
+                  isActive('/institutions') || location.pathname.startsWith('/institutions/')
+                    ? 'text-primary font-semibold'
+                    : 'text-muted-foreground'
+                }`}
+              >
+                Institutions
+              </Link>
+              <Link
+                to="/analytics"
+                className={`transition-colors hover:text-primary ${
+                  isActive('/analytics') ? 'text-primary font-semibold' : 'text-muted-foreground'
+                }`}
+              >
+                Analytics
               </Link>
               {!isStudent && (
                 <Link
@@ -259,42 +185,6 @@ export const Navbar: React.FC = () => {
               About
             </a>
 
-            {/* Try Demo Options on Mobile (Only visible when NOT logged in) */}
-            {!isAuthenticated && (
-              <div className="py-2 border-y border-border/60 my-1 space-y-1">
-                <div className="px-3 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3 text-primary" />
-                  <span>Try Demo</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleSelectDemo('STUDENT')}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-sm font-medium hover:bg-muted rounded-md text-left transition-colors"
-                >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-blue-500/10 text-blue-600">
-                    <GraduationCap className="h-4 w-4" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-semibold">For Student</span>
-                    <span className="text-[11px] text-muted-foreground">Follow slides, whiteboard, & full-screen</span>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSelectDemo('HOST')}
-                  className="flex w-full items-center gap-3 px-3 py-2 text-sm font-medium hover:bg-muted rounded-md text-left transition-colors"
-                >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary/10 text-primary">
-                    <Presentation className="h-4 w-4" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs font-semibold">For Teacher</span>
-                    <span className="text-[11px] text-muted-foreground">Host controls, slide tools, & screen share</span>
-                  </div>
-                </button>
-              </div>
-            )}
-
             {isAuthenticated && user ? (
               <>
                 <Link
@@ -304,6 +194,22 @@ export const Navbar: React.FC = () => {
                 >
                   <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                   Dashboard
+                </Link>
+                <Link
+                  to="/institutions"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted"
+                >
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  Institutions
+                </Link>
+                <Link
+                  to="/analytics"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium hover:bg-muted"
+                >
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                  Analytics
                 </Link>
                 {!isStudent && (
                   <Link

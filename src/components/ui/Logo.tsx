@@ -1,6 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import logoLight from '@/assets/logo.png';
+import logoDark from '@/assets/logo-dark.png';
+import logoIcon from '@/assets/logo-icon.png';
 
 export interface LogoProps {
   className?: string;
@@ -41,13 +44,13 @@ export const Logo: React.FC<LogoProps> = ({
       {!iconOnly ? (
         <>
           <img
-            src="/logo.png"
+            src={logoLight}
             alt="TDP Classroom Lite"
             draggable={false}
             className={cn('block dark:hidden w-auto object-contain', currentSize.full, imageClassName)}
           />
           <img
-            src="/logo-dark.png"
+            src={logoDark}
             alt="TDP Classroom Lite"
             draggable={false}
             className={cn('hidden dark:block w-auto object-contain', currentSize.full, imageClassName)}
@@ -55,7 +58,7 @@ export const Logo: React.FC<LogoProps> = ({
         </>
       ) : (
         <img
-          src="/logo-icon.png"
+          src={logoIcon}
           alt="TDP Classroom Lite"
           draggable={false}
           className={cn('object-contain', currentSize.icon, imageClassName)}
