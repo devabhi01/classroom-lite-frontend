@@ -37,9 +37,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to={`/login?redirect=${redirectUrl}`} replace />;
   }
 
+  /* EMAIL VERIFICATION DISABLED FOR NOW
   if (user && user.isEmailVerified === false) {
     return <Navigate to={`/verify-email?email=${encodeURIComponent(user.email)}`} replace />;
   }
+  */
 
   return <>{children}</>;
 };
@@ -55,9 +57,11 @@ const TeacherRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     );
   }
   if (!isAuthenticated) return <Navigate to="/login" replace />;
+  /* EMAIL VERIFICATION DISABLED FOR NOW
   if (user && user.isEmailVerified === false) {
     return <Navigate to={`/verify-email?email=${encodeURIComponent(user.email)}`} replace />;
   }
+  */
   if (user?.role === 'STUDENT') {
     return <Navigate to="/dashboard" replace />;
   }
@@ -66,7 +70,7 @@ const TeacherRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 
 // Public Only Route Guard (for login/signup)
 const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, user, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
     return (
@@ -76,7 +80,7 @@ const PublicOnlyRoute: React.FC<{ children: React.ReactNode }> = ({ children }) 
     );
   }
 
-  if (isAuthenticated && user?.isEmailVerified !== false) {
+  if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }
 
