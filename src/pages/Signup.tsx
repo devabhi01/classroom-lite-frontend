@@ -178,7 +178,10 @@ export const Signup: React.FC = () => {
       }
 
       await signup(signupPayload);
+      /* EMAIL VERIFICATION DISABLED FOR NOW
       navigate(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      */
+      navigate(redirectPath);
     } catch (err: any) {
       setErrors({ general: err.message || 'Failed to create account. Please try again.' });
     } finally {
@@ -220,6 +223,7 @@ export const Signup: React.FC = () => {
                   <span>{errors.general}</span>
                   {errors.general.toLowerCase().includes('already registered') && (
                     <div className="mt-2 flex items-center gap-3">
+                      {/* EMAIL VERIFICATION DISABLED FOR NOW
                       <Link
                         to={`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`}
                         className="font-semibold text-primary underline hover:text-primary/80"
@@ -227,6 +231,7 @@ export const Signup: React.FC = () => {
                         Enter Verification Code &rarr;
                       </Link>
                       <span className="text-muted-foreground">•</span>
+                      */}
                       <Link
                         to={`/login?email=${encodeURIComponent(email.trim().toLowerCase())}`}
                         className="font-semibold text-primary underline hover:text-primary/80"

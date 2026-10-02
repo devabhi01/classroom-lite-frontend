@@ -137,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: payload.role || userPayload?.role || data?.role || 'STUDENT',
       };
 
+      /* EMAIL VERIFICATION DISABLED FOR NOW
       const requiresVerification =
         data?.requiresVerification === true ||
         authData?.requiresVerification === true ||
@@ -146,6 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toast.info('Account created! Please enter the 6-digit verification code sent to your email.');
         return;
       }
+      */
 
       if (receivedToken) {
         localStorage.setItem(TOKEN_STORAGE_KEY, receivedToken);

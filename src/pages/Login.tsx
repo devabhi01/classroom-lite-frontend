@@ -82,6 +82,7 @@ export const Login: React.FC = () => {
                     <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <div>
                       <span className="font-semibold block">{errors.general}</span>
+                      {/* EMAIL VERIFICATION DISABLED FOR NOW
                       {errors.general.toLowerCase().includes('verif') && (
                         <Link
                           to={`/verify-email?email=${encodeURIComponent(email)}`}
@@ -90,6 +91,7 @@ export const Login: React.FC = () => {
                           Click here to enter your 6-digit verification code &rarr;
                         </Link>
                       )}
+                      */}
                       {isServerOffline && (
                         <p className="mt-1 text-muted-foreground">
                           Cannot connect to the server at <code className="font-mono bg-muted px-1 py-0.5 rounded">http://localhost:3000</code>. Please ensure the backend is running.
