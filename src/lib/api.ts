@@ -8,9 +8,17 @@ export const getApiBaseUrl = (): string => {
     return import.meta.env.VITE_API_URL.replace(/\/+$/, '');
   }
   if (typeof window !== 'undefined' && window.location) {
-    const protocol = window.location.protocol;
-    const hostname = window.location.hostname;
-    return `${protocol}//${hostname}:3000`;
+    const isLocalhost =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.');
+    if (isLocalhost) {
+      const protocol = window.location.protocol;
+      const hostname = window.location.hostname;
+      return `${protocol}//${hostname}:3000`;
+    }
+    // Production cloud default fallback
+    return 'https://classroom-lite-backend.onrender.com';
   }
   return 'http://localhost:3000';
 };
@@ -22,7 +30,7 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000,
+  timeout: 60000,
 });
 
 // Request interceptor to attach JWT token
@@ -86,7 +94,11 @@ api.interceptors.response.use(
         break;
       default:
         if (!error.response) {
-          message = 'Unable to connect to the server. Please check your network or server status.';
+          if (error.code === 'ECONNABORTED' || error.message?.toLowerCase().includes('timeout')) {
+            message = 'Server request timed out. The server or database may be spinning up from sleep, please try again in a moment.';
+          } else {
+            message = `Unable to connect to the server at ${baseURL}. Please check your network or server status.`;
+          }
         }
         break;
     }
