@@ -217,7 +217,24 @@ export const Signup: React.FC = () => {
             <CardContent className="space-y-4">
               {errors.general && (
                 <div className="rounded-md bg-destructive/15 p-3 text-xs font-medium text-destructive">
-                  {errors.general}
+                  <span>{errors.general}</span>
+                  {errors.general.toLowerCase().includes('already registered') && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <Link
+                        to={`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`}
+                        className="font-semibold text-primary underline hover:text-primary/80"
+                      >
+                        Enter Verification Code &rarr;
+                      </Link>
+                      <span className="text-muted-foreground">•</span>
+                      <Link
+                        to={`/login?email=${encodeURIComponent(email.trim().toLowerCase())}`}
+                        className="font-semibold text-primary underline hover:text-primary/80"
+                      >
+                        Go to Sign In &rarr;
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
 
