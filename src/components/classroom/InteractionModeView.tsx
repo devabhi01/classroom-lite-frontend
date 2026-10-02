@@ -13,11 +13,10 @@ import {
   FileText,
   Monitor,
   Users,
-  ShieldCheck,
   ArrowLeftRight,
+  Crown,
+  GraduationCap,
 } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { Participant } from '@/types/participant';
 import { RemoteStream } from '@/hooks/useVoiceChat';
 import { WorkspaceTab } from '@/types/classroom';
@@ -57,11 +56,31 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSwapped, setIsSwapped] = useState(false);
   const [localMirrored, setLocalMirrored] = useState(true);
-  const [pipPosition, setPipPosition] = useState<'top-right' | 'top-left' | 'bottom-right' | 'bottom-left'>('top-right');
 
-  // Convert remoteStreams map to array
-  const remoteList = Array.from(remoteStreams.values());
-  const totalPeers = remoteList.length;
+  // Filter other participants in the room (excluding current user)
+  const otherParticipants = participants.filter((p) => p.userId !== currentUserId);
+
+  // If participants list is empty or only 1 remote stream exists in map, find peers
+  const peersList = otherParticipants.length > 0
+    ? otherParticipants.map((p) => {
+        const streamData = remoteStreams.get(p.userId);
+        return {
+          userId: p.userId,
+          name: p.name,
+          role: p.role,
+          streamData: streamData || null,
+        };
+      })
+    : Array.from(remoteStreams.values()).map((r) => ({
+        userId: r.userId,
+        name: r.name,
+        role: 'STUDENT',
+        streamData: r,
+      }));
+
+  const totalPeers = peersList.length;
+  const isOneOnOne = totalPeers === 1;
+  const singlePeer = isOneOnOne ? peersList[0] : null;
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -82,10 +101,6 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
 
-  // 1-on-1 Mode: Exactly 1 remote participant
-  const isOneOnOne = totalPeers === 1;
-  const singleRemote = isOneOnOne ? remoteList[0] : null;
-
   return (
     <div
       ref={containerRef}
@@ -94,9 +109,9 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
       {/* ── Top Floating Header (WhatsApp call style) ── */}
       <div className="absolute top-0 inset-x-0 z-30 flex items-center justify-between p-3 sm:p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent pointer-events-none">
         <div className="flex items-center space-x-2 pointer-events-auto">
-          <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-medium backdrop-blur-md">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold tracking-wide">Interaction Mode</span>
+          <div className="flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-xs font-semibold backdrop-blur-md shadow-lg">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping mr-0.5" />
+            <span>Interaction Mode</span>
           </div>
           <span className="text-xs text-zinc-300 font-medium hidden sm:inline truncate max-w-[200px]">
             {classroomName}
@@ -104,29 +119,29 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
         </div>
 
         <div className="flex items-center space-x-2 pointer-events-auto">
-          {/* Quick workspace switcher for Host */}
+          {/* Quick workspace switcher for Host to easily return to Whiteboard / PDF / Screen */}
           {isHost && onSwitchTab && (
-            <div className="flex items-center bg-zinc-900/80 border border-zinc-800 rounded-lg p-0.5 backdrop-blur-md">
+            <div className="flex items-center bg-zinc-900/90 border border-zinc-800 rounded-lg p-1 backdrop-blur-md shadow-lg">
               <button
                 onClick={() => onSwitchTab('whiteboard')}
-                className="px-2 py-1 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1"
-                title="Switch to Whiteboard"
+                className="px-2.5 py-1 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 font-medium cursor-pointer"
+                title="Return to Whiteboard"
               >
                 <Edit3 className="h-3.5 w-3.5 text-primary" />
                 <span className="hidden md:inline">Whiteboard</span>
               </button>
               <button
                 onClick={() => onSwitchTab('pdf')}
-                className="px-2 py-1 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1"
-                title="Switch to PDF"
+                className="px-2.5 py-1 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 font-medium cursor-pointer"
+                title="Return to PDF Presentation"
               >
                 <FileText className="h-3.5 w-3.5 text-blue-400" />
                 <span className="hidden md:inline">PDF</span>
               </button>
               <button
                 onClick={() => onSwitchTab('screenshare')}
-                className="px-2 py-1 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1"
-                title="Switch to Screen Share"
+                className="px-2.5 py-1 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors flex items-center gap-1 font-medium cursor-pointer"
+                title="Start Screen Sharing"
               >
                 <Monitor className="h-3.5 w-3.5 text-purple-400" />
                 <span className="hidden md:inline">Screen</span>
@@ -136,7 +151,7 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
 
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-full bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white backdrop-blur-md transition-colors"
+            className="p-2 rounded-full bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white backdrop-blur-md transition-colors cursor-pointer"
             title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Call'}
           >
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -147,9 +162,8 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
       {/* ── Main Call Display Area ── */}
       <div className="relative flex-1 w-full h-full overflow-hidden p-2 sm:p-4 flex items-center justify-center">
         {totalPeers === 0 ? (
-          /* Zero Remote Peers: Waiting for participants state */
-          <div className="relative w-full h-full flex flex-col items-center justify-center">
-            {/* Show local camera full view or nice placeholder */}
+          /* Zero Remote Peers: Only current user is present */
+          <div className="relative w-full h-full flex flex-col items-center justify-center p-4">
             <div className="relative w-full max-w-2xl aspect-video rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800 shadow-2xl flex items-center justify-center">
               {videoEnabled && localStream ? (
                 <video
@@ -175,22 +189,22 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
 
               <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full backdrop-blur-md text-xs font-medium">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>You (Ready for call)</span>
+                <span>You (In Video Call)</span>
               </div>
             </div>
 
             <div className="mt-4 text-center">
               <p className="text-sm text-zinc-300 font-medium">Waiting for other participants to join the video call...</p>
-              <p className="text-xs text-zinc-400 mt-1">Their video will appear here immediately when they connect.</p>
+              <p className="text-xs text-zinc-400 mt-1">Both you and others will appear here as soon as they enter.</p>
             </div>
           </div>
-        ) : isOneOnOne && singleRemote ? (
+        ) : isOneOnOne && singlePeer ? (
           /* 1-on-1 WhatsApp Call Layout: Edge-to-edge Remote with Floating PIP Local */
           <div className="relative w-full h-full flex items-center justify-center">
-            {/* Main Stage Video Tile (Normally remote, or local if swapped) */}
+            {/* Main Stage Video Tile */}
             <div className="relative w-full h-full rounded-2xl sm:rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800 shadow-2xl flex items-center justify-center">
               {isSwapped ? (
-                /* Swapped: Local on main stage */
+                /* Swapped: Local self-camera on main stage */
                 videoEnabled && localStream ? (
                   <video
                     ref={(el) => {
@@ -213,14 +227,19 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
                   </div>
                 )
               ) : (
-                /* Normal: Remote on main stage */
-                <RemoteVideoPlayer remote={singleRemote} />
+                /* Normal: Remote peer on main stage */
+                <PeerVideoPlayer peer={singlePeer} />
               )}
 
               {/* Main Stage Name Tag */}
-              <div className="absolute bottom-20 sm:bottom-24 left-4 z-20 flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-full backdrop-blur-md text-xs font-medium text-white shadow-lg">
-                <span className="font-semibold">{isSwapped ? 'You' : singleRemote.name}</span>
-                {!isSwapped && singleRemote.audioMuted && (
+              <div className="absolute bottom-20 sm:bottom-24 left-4 z-20 flex items-center gap-2 bg-black/60 px-3.5 py-1.5 rounded-full backdrop-blur-md text-xs font-semibold text-white shadow-lg">
+                <span>{isSwapped ? 'You' : singlePeer.name}</span>
+                {!isSwapped && singlePeer.role === 'HOST' && (
+                  <span className="flex items-center gap-0.5 bg-amber-500/20 text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    <Crown className="h-2.5 w-2.5" /> Teacher
+                  </span>
+                )}
+                {!isSwapped && singlePeer.streamData?.audioMuted && (
                   <span className="bg-red-500/80 p-0.5 rounded text-[10px] text-white">
                     <MicOff className="h-3 w-3" />
                   </span>
@@ -231,20 +250,12 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
             {/* Floating Picture-in-Picture (PIP) Tile (Self preview or remote if swapped) */}
             <div
               onClick={() => setIsSwapped((prev) => !prev)}
-              className={`absolute z-30 w-28 sm:w-44 md:w-52 aspect-[3/4] sm:aspect-video rounded-xl sm:rounded-2xl overflow-hidden bg-zinc-900 border-2 border-primary/60 shadow-2xl cursor-pointer group transition-all duration-300 hover:scale-105 active:scale-95 ${
-                pipPosition === 'top-right'
-                  ? 'top-16 sm:top-20 right-3 sm:right-6'
-                  : pipPosition === 'top-left'
-                  ? 'top-16 sm:top-20 left-3 sm:left-6'
-                  : pipPosition === 'bottom-left'
-                  ? 'bottom-24 left-3 sm:left-6'
-                  : 'bottom-24 right-3 sm:right-6'
-              }`}
-              title="Click or tap to swap main and mini video"
+              className="absolute z-30 top-16 sm:top-20 right-3 sm:right-6 w-28 xs:w-36 sm:w-48 aspect-[3/4] sm:aspect-video rounded-xl sm:rounded-2xl overflow-hidden bg-zinc-900 border-2 border-primary/70 shadow-2xl cursor-pointer group transition-all duration-300 hover:scale-105 active:scale-95"
+              title="Click or tap to swap view"
             >
               {isSwapped ? (
                 /* Remote in mini PIP */
-                <RemoteVideoPlayer remote={singleRemote} isPip />
+                <PeerVideoPlayer peer={singlePeer} isPip />
               ) : (
                 /* Local in mini PIP */
                 videoEnabled && localStream ? (
@@ -276,8 +287,8 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
               </div>
 
               {/* Mini tag */}
-              <div className="absolute bottom-1.5 left-1.5 z-10 bg-black/70 px-2 py-0.5 rounded text-[10px] font-semibold">
-                {isSwapped ? singleRemote.name : 'You'}
+              <div className="absolute bottom-1.5 left-1.5 z-10 bg-black/70 px-2 py-0.5 rounded text-[10px] font-semibold text-white">
+                {isSwapped ? singlePeer.name : 'You'}
               </div>
             </div>
           </div>
@@ -315,23 +326,28 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
                   <span className="text-xs text-zinc-400">Camera Off</span>
                 </div>
               )}
-              <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 bg-black/60 px-2.5 py-1 rounded-full text-xs font-medium">
-                <span className="font-semibold text-white">You</span>
+              <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 bg-black/60 px-2.5 py-1 rounded-full text-xs font-semibold">
+                <span className="text-white">You</span>
                 {!audioEnabled && <MicOff className="h-3 w-3 text-red-400" />}
               </div>
             </div>
 
             {/* Remote Peers Tiles */}
-            {remoteList.map((remote) => (
+            {peersList.map((peer) => (
               <div
-                key={remote.userId}
+                key={peer.userId}
                 className="relative w-full h-full min-h-[160px] sm:min-h-[220px] rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-lg group"
               >
-                <RemoteVideoPlayer remote={remote} />
+                <PeerVideoPlayer peer={peer} />
 
-                <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 bg-black/60 px-2.5 py-1 rounded-full text-xs font-medium">
-                  <span className="font-semibold text-white">{remote.name}</span>
-                  {remote.audioMuted && <MicOff className="h-3 w-3 text-red-400" />}
+                <div className="absolute bottom-2 left-2 z-10 flex items-center gap-1.5 bg-black/60 px-2.5 py-1 rounded-full text-xs font-semibold">
+                  <span className="text-white">{peer.name}</span>
+                  {peer.role === 'HOST' && (
+                    <span className="flex items-center gap-0.5 bg-amber-500/20 text-amber-400 text-[9px] font-bold px-1.5 py-0.2 rounded-full">
+                      <Crown className="h-2.5 w-2.5" /> Teacher
+                    </span>
+                  )}
+                  {peer.streamData?.audioMuted && <MicOff className="h-3 w-3 text-red-400" />}
                 </div>
               </div>
             ))}
@@ -341,7 +357,7 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
 
       {/* ── WhatsApp Call Floating Bottom Control Dock ── */}
       <div className="absolute bottom-4 inset-x-0 z-40 flex items-center justify-center pointer-events-none px-4">
-        <div className="flex items-center gap-2 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 rounded-full bg-zinc-900/90 border border-zinc-800 shadow-2xl backdrop-blur-xl pointer-events-auto">
+        <div className="flex items-center gap-2.5 sm:gap-4 px-4 sm:px-6 py-2.5 sm:py-3 rounded-full bg-zinc-900/90 border border-zinc-800 shadow-2xl backdrop-blur-xl pointer-events-auto">
           {/* Microphone Mute / Unmute */}
           <button
             onClick={onToggleAudio}
@@ -384,6 +400,18 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
             <FlipHorizontal className="h-5 w-5" />
           </button>
 
+          {/* Host Exit Interaction Mode button */}
+          {isHost && onSwitchTab && (
+            <button
+              onClick={() => onSwitchTab('whiteboard')}
+              className="px-3.5 py-2 rounded-full bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+              title="Return to Whiteboard"
+            >
+              <Edit3 className="h-4 w-4 text-primary" />
+              <span className="hidden sm:inline">Whiteboard</span>
+            </button>
+          )}
+
           {/* End Call / Leave Button (Bright Red Circle) */}
           <button
             onClick={isHost && onEndClassroom ? onEndClassroom : onLeave}
@@ -399,72 +427,85 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
   );
 };
 
-// ── Remote Video Subcomponent ──
-const RemoteVideoPlayer: React.FC<{
-  remote: RemoteStream;
+// ── Peer Video Subcomponent ──
+const PeerVideoPlayer: React.FC<{
+  peer: {
+    userId: string;
+    name: string;
+    role?: string;
+    streamData: RemoteStream | null;
+  };
   isPip?: boolean;
-}> = ({ remote, isPip = false }) => {
+}> = ({ peer, isPip = false }) => {
+  const stream = peer.streamData?.stream;
   const [hasVideoTrack, setHasVideoTrack] = useState(() => {
-    return remote.stream?.getVideoTracks().some((t) => t.enabled && t.readyState === 'live') ?? false;
+    return stream?.getVideoTracks().some((t) => t.enabled && t.readyState === 'live') ?? false;
   });
   const [isFlipped, setIsFlipped] = useState(false);
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
-    if (!remote.stream) return;
+    if (!stream) {
+      setHasVideoTrack(false);
+      return;
+    }
     const checkTracks = () => {
-      const live = remote.stream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live');
+      const live = stream.getVideoTracks().some((t) => t.enabled && t.readyState === 'live');
       setHasVideoTrack(live);
     };
 
     checkTracks();
-    remote.stream.addEventListener('addtrack', checkTracks);
-    remote.stream.addEventListener('removetrack', checkTracks);
+    stream.addEventListener('addtrack', checkTracks);
+    stream.addEventListener('removetrack', checkTracks);
 
     const interval = setInterval(checkTracks, 1000);
     return () => {
-      remote.stream.removeEventListener('addtrack', checkTracks);
-      remote.stream.removeEventListener('removetrack', checkTracks);
+      stream.removeEventListener('addtrack', checkTracks);
+      stream.removeEventListener('removetrack', checkTracks);
       clearInterval(interval);
     };
-  }, [remote.stream]);
+  }, [stream]);
 
-  const showVideo = hasVideoTrack && !remote.videoMuted;
+  const showVideo = hasVideoTrack && !peer.streamData?.videoMuted;
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
       {/* Audio stream element (plays sound) */}
-      <audio
-        ref={(el) => {
-          if (el && remote.stream && el.srcObject !== remote.stream) {
-            el.srcObject = remote.stream;
-            el.play().catch(() => {});
-          }
-        }}
-        autoPlay
-      />
+      {stream && (
+        <audio
+          ref={(el) => {
+            if (el && el.srcObject !== stream) {
+              el.srcObject = stream;
+              el.play().catch(() => {});
+            }
+          }}
+          autoPlay
+        />
+      )}
 
       {/* Video stream element */}
-      <video
-        ref={(el) => {
-          if (el && remote.stream && el.srcObject !== remote.stream) {
-            el.srcObject = remote.stream;
-            el.play().catch(() => {});
-          }
-        }}
-        autoPlay
-        playsInline
-        className={`w-full h-full object-cover transition-transform duration-200 ${showVideo ? 'block' : 'hidden'}`}
-        style={{
-          transform: `${isFlipped ? 'scaleX(-1)' : ''} rotate(${rotation}deg)`.trim() || undefined,
-        }}
-      />
+      {stream && (
+        <video
+          ref={(el) => {
+            if (el && el.srcObject !== stream) {
+              el.srcObject = stream;
+              el.play().catch(() => {});
+            }
+          }}
+          autoPlay
+          playsInline
+          className={`w-full h-full object-cover transition-transform duration-200 ${showVideo ? 'block' : 'hidden'}`}
+          style={{
+            transform: `${isFlipped ? 'scaleX(-1)' : ''} rotate(${rotation}deg)`.trim() || undefined,
+          }}
+        />
+      )}
 
       {/* Camera Off Placeholder */}
       {!showVideo && (
         <div className="flex flex-col items-center justify-center gap-3 text-zinc-300">
           <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-3xl sm:text-4xl font-bold uppercase text-zinc-200 shadow-2xl">
-            {remote.name.charAt(0)}
+            {peer.name.charAt(0)}
           </div>
           <span className="text-xs sm:text-sm font-medium text-zinc-400">Camera Off</span>
         </div>

@@ -124,85 +124,81 @@ export const StudentClassroomView: React.FC<StudentClassroomViewProps> = ({
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground select-none">
-      {/* ── 1. Clean Mobile-Responsive Top Header ── */}
-      <header className="flex h-14 sm:h-16 w-full items-center justify-between border-b border-border bg-card/95 backdrop-blur-md px-3 sm:px-5 shadow-xs z-30 shrink-0 gap-2">
-        {/* Left: Minimal Branding & Classroom Title */}
-        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-          <Logo size="sm" withLink={false} />
-          <div className="min-w-0">
-            <h1 className="truncate text-xs sm:text-sm font-bold text-foreground max-w-[120px] xs:max-w-[180px] sm:max-w-[260px]">
-              {classroom.name}
-            </h1>
-            <div className="flex items-center space-x-1.5 text-[10px] sm:text-xs text-muted-foreground">
-              <span className="font-mono font-semibold text-foreground">{classroomCode}</span>
-              <button
-                onClick={handleCopyCode}
-                className="text-primary hover:opacity-80 p-0.5 rounded cursor-pointer"
-                title="Copy code"
-              >
-                {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-              </button>
+      {/* ── 1. Clean Mobile-Responsive Top Header (Hidden during full-screen interaction video call) ── */}
+      {activeTab !== 'interaction' && (
+        <header className="flex h-14 sm:h-16 w-full items-center justify-between border-b border-border bg-card/95 backdrop-blur-md px-3 sm:px-5 shadow-xs z-30 shrink-0 gap-2">
+          {/* Left: Minimal Branding & Classroom Title */}
+          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+            <Logo size="sm" withLink={false} />
+            <div className="min-w-0">
+              <h1 className="truncate text-xs sm:text-sm font-bold text-foreground max-w-[120px] xs:max-w-[180px] sm:max-w-[260px]">
+                {classroom.name}
+              </h1>
+              <div className="flex items-center space-x-1.5 text-[10px] sm:text-xs text-muted-foreground">
+                <span className="font-mono font-semibold text-foreground">{classroomCode}</span>
+                <button
+                  onClick={handleCopyCode}
+                  className="text-primary hover:opacity-80 p-0.5 rounded cursor-pointer"
+                  title="Copy code"
+                >
+                  {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Center: Live Sync Status Badge (Showing Teacher's Current Activity) */}
-        <div className="flex items-center">
-          {activeTab === 'whiteboard' && (
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] sm:text-xs font-semibold shadow-2xs">
-              <Edit3 className="h-3 sm:h-3.5 w-3 sm:w-3.5 shrink-0" />
-              <span>Whiteboard</span>
-            </div>
-          )}
-          {activeTab === 'pdf' && (
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-500 text-[10px] sm:text-xs font-semibold shadow-2xs">
-              <FileText className="h-3 sm:h-3.5 w-3 sm:w-3.5 shrink-0" />
-              <span>PDF Presentation</span>
-            </div>
-          )}
-          {activeTab === 'screenshare' && (
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-500 text-[10px] sm:text-xs font-semibold shadow-2xs">
-              <Monitor className="h-3 sm:h-3.5 w-3 sm:w-3.5 shrink-0 animate-pulse" />
-              <span>Teacher's Screen</span>
-            </div>
-          )}
-          {activeTab === 'interaction' && (
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] sm:text-xs font-semibold shadow-2xs">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping mr-0.5" />
-              <span>Live Video Call</span>
-            </div>
-          )}
-        </div>
-
-        {/* Right: Duration, Participants Count & Leave Button */}
-        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
-          {/* Duration */}
-          <div className="hidden xs:flex items-center gap-1 px-2 py-1 rounded-md bg-muted text-[11px] font-mono text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            <span>{formatDuration(elapsedSeconds)}</span>
+          {/* Center: Live Sync Status Badge (Showing Teacher's Current Activity) */}
+          <div className="flex items-center">
+            {activeTab === 'whiteboard' && (
+              <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] sm:text-xs font-semibold shadow-2xs">
+                <Edit3 className="h-3 sm:h-3.5 w-3 sm:w-3.5 shrink-0" />
+                <span>Whiteboard</span>
+              </div>
+            )}
+            {activeTab === 'pdf' && (
+              <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-500 text-[10px] sm:text-xs font-semibold shadow-2xs">
+                <FileText className="h-3 sm:h-3.5 w-3 sm:w-3.5 shrink-0" />
+                <span>PDF Presentation</span>
+              </div>
+            )}
+            {activeTab === 'screenshare' && (
+              <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-500 text-[10px] sm:text-xs font-semibold shadow-2xs">
+                <Monitor className="h-3 sm:h-3.5 w-3 sm:w-3.5 shrink-0 animate-pulse" />
+                <span>Teacher's Screen</span>
+              </div>
+            )}
           </div>
 
-          {/* Participants toggle */}
-          <button
-            onClick={() => setParticipantsDrawerOpen(true)}
-            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-xs font-medium cursor-pointer transition-colors"
-            title="Classroom participants"
-          >
-            <Users className="h-3.5 w-3.5 text-primary" />
-            <span className="font-semibold">{participants.length}</span>
-          </button>
+          {/* Right: Duration, Participants Count & Leave Button */}
+          <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            {/* Duration */}
+            <div className="hidden xs:flex items-center gap-1 px-2 py-1 rounded-md bg-muted text-[11px] font-mono text-muted-foreground">
+              <Clock className="h-3 w-3" />
+              <span>{formatDuration(elapsedSeconds)}</span>
+            </div>
 
-          {/* Leave Button */}
-          <button
-            onClick={leaveClassroom}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-semibold cursor-pointer transition-colors"
-            title="Leave classroom"
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Leave</span>
-          </button>
-        </div>
-      </header>
+            {/* Participants toggle */}
+            <button
+              onClick={() => setParticipantsDrawerOpen(true)}
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-xs font-medium cursor-pointer transition-colors"
+              title="Classroom participants"
+            >
+              <Users className="h-3.5 w-3.5 text-primary" />
+              <span className="font-semibold">{participants.length}</span>
+            </button>
+
+            {/* Leave Button */}
+            <button
+              onClick={leaveClassroom}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-semibold cursor-pointer transition-colors"
+              title="Leave classroom"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Leave</span>
+            </button>
+          </div>
+        </header>
+      )}
 
       {/* ── 2. Collaborative Workspace (Auto-Follows Teacher) ── */}
       <main className="relative flex flex-1 w-full h-full overflow-hidden bg-muted/15">

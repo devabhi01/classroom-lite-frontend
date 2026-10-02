@@ -94,25 +94,29 @@ export const TeacherClassroomView: React.FC<TeacherClassroomViewProps> = ({
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
-      {/* 1. Host Classroom Header */}
-      <ClassroomHeader
-        classroomName={classroom.name}
-        classroomCode={classroom.code}
-        participantCount={participants.length}
-        isHost={true}
-        createdAt={classroom.createdAt}
-        isEnded={classroom.status === 'ENDED'}
-        onLeave={leaveClassroom}
-        onEndClassroom={endClassroom}
-        onToggleParticipants={toggleParticipants}
-        isParticipantOpen={isParticipantPanelOpen}
-        isMobileParticipantOpen={mobileParticipantsOpen}
-      />
+      {/* 1. Host Classroom Header (Hidden during full-screen interaction video call) */}
+      {activeTab !== 'interaction' && (
+        <ClassroomHeader
+          classroomName={classroom.name}
+          classroomCode={classroom.code}
+          participantCount={participants.length}
+          isHost={true}
+          createdAt={classroom.createdAt}
+          isEnded={classroom.status === 'ENDED'}
+          onLeave={leaveClassroom}
+          onEndClassroom={endClassroom}
+          onToggleParticipants={toggleParticipants}
+          isParticipantOpen={isParticipantPanelOpen}
+          isMobileParticipantOpen={mobileParticipantsOpen}
+          pendingRequestsCount={pendingRequests.length}
+          activeTab={activeTab}
+        />
+      )}
 
       {/* 2. Main Middle Section: Host Sidebar + Collaborative Workspace */}
       <div className="relative flex flex-1 overflow-hidden">
-        {/* Desktop Sidebar: Participants & Join Requests (Minimizable) */}
-        {isParticipantPanelOpen ? (
+        {/* Desktop Sidebar: Participants & Join Requests (Hidden in full-screen interaction mode) */}
+        {activeTab !== 'interaction' && (isParticipantPanelOpen ? (
           <div className="hidden md:flex w-72 lg:w-80 shrink-0 flex-col transition-all duration-200 border-r border-border bg-card">
             {/* Host Join Requests */}
             {pendingRequests.length > 0 && (
@@ -152,7 +156,7 @@ export const TeacherClassroomView: React.FC<TeacherClassroomViewProps> = ({
               Participants ({participants.length})
             </span>
           </button>
-        )}
+        ))}
 
         {/* Mobile Sidebar Overlay / Drawer */}
         {mobileParticipantsOpen && (
@@ -244,15 +248,21 @@ export const TeacherClassroomView: React.FC<TeacherClassroomViewProps> = ({
         </main>
       </div>
 
-      {/* 3. Teacher Controls Footer */}
-      <ClassroomControls
-        activeTab={activeTab}
-        onTabChange={switchTab}
-        isHost={true}
-        isScreenSharing={isSharing}
-        onStartScreenShare={startScreenShare}
-        onStopScreenShare={stopScreenShare}
-      />
+      {/* 3. Teacher Controls Footer (Hidden during full-screen interaction video call) */}
+      {activeTab !== 'interaction' && (
+        <ClassroomControls
+          activeTab={activeTab}
+          onTabChange={switchTab}
+          isHost={true}
+          isScreenSharing={isSharing}
+          onStartScreenShare={startScreenShare}
+          onStopScreenShare={stopScreenShare}
+          audioEnabled={audioEnabled}
+          videoEnabled={videoEnabled}
+          onToggleAudio={toggleAudio}
+          onToggleVideo={toggleVideo}
+        />
+      )}
     </div>
   );
 };

@@ -10,7 +10,8 @@ interface WhiteboardToolbarProps {
   onColorChange: (color: string) => void;
   strokeWidth: number;
   onStrokeWidthChange: (width: number) => void;
-  onClear: () => void;
+  onClear?: () => void;
+  isHost?: boolean;
   disabled?: boolean;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -39,6 +40,7 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
   strokeWidth,
   onStrokeWidthChange,
   onClear,
+  isHost = true,
   disabled = false,
   isFullscreen = false,
   onToggleFullscreen,
@@ -141,18 +143,20 @@ export const WhiteboardToolbar: React.FC<WhiteboardToolbarProps> = ({
           </Button>
         )}
 
-        {/* Clear Canvas */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClear}
-          disabled={disabled}
-          className="h-8 px-2.5 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-          title="Clear entire whiteboard"
-        >
-          <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-          <span>Clear</span>
-        </Button>
+        {/* Clear Canvas (Host / Teacher only) */}
+        {isHost && onClear && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClear}
+            disabled={disabled}
+            className="h-8 px-2.5 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            title="Clear entire whiteboard"
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+            <span>Clear</span>
+          </Button>
+        )}
       </div>
     </div>
   );

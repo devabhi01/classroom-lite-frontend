@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Edit3, Monitor, MonitorStop, Video } from 'lucide-react';
+import { FileText, Edit3, Monitor, MonitorStop, Video, VideoOff, Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { WorkspaceTab } from '@/types/classroom';
 
@@ -10,6 +10,10 @@ interface ClassroomControlsProps {
   isScreenSharing: boolean;
   onStartScreenShare: () => void;
   onStopScreenShare: () => void;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
+  onToggleAudio?: () => void;
+  onToggleVideo?: () => void;
 }
 
 export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
@@ -19,6 +23,10 @@ export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
   isScreenSharing,
   onStartScreenShare,
   onStopScreenShare,
+  audioEnabled,
+  videoEnabled,
+  onToggleAudio,
+  onToggleVideo,
 }) => {
   return (
     <footer className="flex h-16 w-full items-center justify-between border-t border-border bg-card px-3 sm:px-6 shadow-sm select-none gap-2">
@@ -79,19 +87,47 @@ export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
         </button>
       </div>
 
-      {/* Screen Sharing Quick Toggle (Host Only) */}
-      <div className="flex items-center space-x-2">
+      {/* Quick Host Actions: Mic, Camera, Screen Sharing */}
+      <div className="flex items-center space-x-2 shrink-0">
+        {isHost && onToggleAudio && (
+          <Button
+            variant={audioEnabled ? 'outline' : 'destructive'}
+            size="sm"
+            onClick={onToggleAudio}
+            className={`h-9 px-2.5 text-xs font-medium cursor-pointer ${
+              !audioEnabled ? 'animate-pulse' : ''
+            }`}
+            title={audioEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
+          >
+            {audioEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            <span className="hidden md:inline ml-1.5">{audioEnabled ? 'Mute' : 'Unmute'}</span>
+          </Button>
+        )}
+
+        {isHost && onToggleVideo && (
+          <Button
+            variant={videoEnabled ? 'outline' : 'destructive'}
+            size="sm"
+            onClick={onToggleVideo}
+            className="h-9 px-2.5 text-xs font-medium cursor-pointer"
+            title={videoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
+          >
+            {videoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+            <span className="hidden md:inline ml-1.5">{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
+          </Button>
+        )}
+
         {isHost ? (
           isScreenSharing ? (
             <Button
               variant="destructive"
               size="sm"
               onClick={onStopScreenShare}
-              className="h-9 px-3 text-xs sm:text-sm font-medium animate-pulse"
+              className="h-9 px-3 text-xs sm:text-sm font-medium animate-pulse cursor-pointer"
             >
               <MonitorStop className="mr-1.5 h-4 w-4" />
               <span className="hidden sm:inline">Stop Screen Share</span>
-              <span className="sm:hidden">Stop Share</span>
+              <span className="sm:hidden">Stop</span>
             </Button>
           ) : (
             <Button
@@ -101,9 +137,9 @@ export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
                 onTabChange('screenshare');
                 onStartScreenShare();
               }}
-              className="h-9 px-3 text-xs sm:text-sm font-medium"
+              className="h-9 px-3 text-xs sm:text-sm font-medium cursor-pointer"
             >
-              <Monitor className="mr-1.5 h-4 w-4 text-emerald-600" />
+              <Monitor className="mr-1.5 h-4 w-4 text-purple-600" />
               <span className="hidden sm:inline">Share Screen</span>
               <span className="sm:hidden">Share</span>
             </Button>
@@ -111,8 +147,8 @@ export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
         ) : (
           <div className="text-xs text-muted-foreground hidden sm:block">
             {isScreenSharing ? (
-              <span className="flex items-center text-emerald-600 font-medium">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping mr-1.5" />
+              <span className="flex items-center text-purple-600 font-medium">
+                <span className="h-2 w-2 rounded-full bg-purple-500 animate-ping mr-1.5" />
                 Live Screen Stream Active
               </span>
             ) : (
