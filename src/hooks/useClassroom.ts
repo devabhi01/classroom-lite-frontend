@@ -246,6 +246,19 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
       setActiveTab('whiteboard');
     };
 
+    // Screenshare started/stopped auto-switch for students
+    const handleScreenshareStarted = () => {
+      if (!isHost) {
+        setActiveTab('screenshare');
+      }
+    };
+
+    const handleScreenshareStopped = () => {
+      if (!isHost) {
+        setActiveTab((prev) => (prev === 'screenshare' ? 'whiteboard' : prev));
+      }
+    };
+
     s.on('connect', onConnect);
     s.on('disconnect', onDisconnect);
     s.on('connect_error', onConnectError);
@@ -260,6 +273,9 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
     s.on('pdf:share', handlePdfShared);
     s.on('pdf:closed', handlePdfClosed);
     s.on('pdf:close', handlePdfClosed);
+    s.on('screenshare:started', handleScreenshareStarted);
+    s.on('screenshare:stopped', handleScreenshareStopped);
+    s.on('webrtc:screen-stopped', handleScreenshareStopped);
 
     // If socket already connected, join room directly
     if (s.connected) {
@@ -285,6 +301,9 @@ export const useClassroom = ({ classroomCode, currentUser }: UseClassroomProps) 
         s.off('pdf:share', handlePdfShared);
         s.off('pdf:closed', handlePdfClosed);
         s.off('pdf:close', handlePdfClosed);
+        s.off('screenshare:started', handleScreenshareStarted);
+        s.off('screenshare:stopped', handleScreenshareStopped);
+        s.off('webrtc:screen-stopped', handleScreenshareStopped);
       }
     };
   }, [classroomCode, currentUser?.id, navigate]);

@@ -7,6 +7,8 @@ import { Dialog } from '@/components/ui/Dialog';
 import { copyToClipboard } from '@/lib/utils';
 import { toast } from '@/components/ui/Toast';
 
+import { WorkspaceTab } from '@/types/classroom';
+
 interface ClassroomHeaderProps {
   classroomName: string;
   classroomCode: string;
@@ -19,6 +21,8 @@ interface ClassroomHeaderProps {
   onToggleParticipants?: () => void;
   isParticipantOpen?: boolean;
   isMobileParticipantOpen?: boolean;
+  pendingRequestsCount?: number;
+  activeTab?: WorkspaceTab;
 }
 
 export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
@@ -32,6 +36,8 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
   onEndClassroom,
   onToggleParticipants,
   isParticipantOpen = true,
+  pendingRequestsCount = 0,
+  activeTab,
 }) => {
   const [copied, setCopied] = useState(false);
   const [confirmEndOpen, setConfirmEndOpen] = useState(false);
@@ -113,23 +119,36 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
         </div>
       </div>
 
-      {/* Center: Live Classroom Session Timer */}
-      <div
-        className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-muted/60 dark:bg-muted/40 border border-border text-[11px] sm:text-xs font-mono font-medium text-foreground shadow-2xs shrink-0 select-none"
-        title={isEnded ? 'Classroom session ended' : `Session duration: ${formatDuration(elapsedSeconds)}`}
-      >
-        {isEnded ? (
-          <span className="h-2 w-2 rounded-full bg-destructive" />
-        ) : (
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+      {/* Center: Live Classroom Session Timer & Active Mode Badge */}
+      <div className="flex items-center gap-2 shrink-0">
+        <div
+          className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-muted/60 dark:bg-muted/40 border border-border text-[11px] sm:text-xs font-mono font-medium text-foreground shadow-2xs select-none"
+          title={isEnded ? 'Classroom session ended' : `Session duration: ${formatDuration(elapsedSeconds)}`}
+        >
+          {isEnded ? (
+            <span className="h-2 w-2 rounded-full bg-destructive" />
+          ) : (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          )}
+          <Clock className="h-3.5 w-3.5 text-muted-foreground hidden xs:inline" />
+          <span className="font-semibold tracking-wider">
+            {formatDuration(elapsedSeconds)}
           </span>
+        </div>
+
+        {/* Active Mode Pill for Host */}
+        {activeTab && (
+          <div className="hidden lg:flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border shadow-2xs select-none bg-muted/40 border-border text-foreground">
+            <span className="text-muted-foreground">Broadcasting:</span>
+            {activeTab === 'whiteboard' && <span className="text-primary font-bold">Whiteboard</span>}
+            {activeTab === 'pdf' && <span className="text-blue-500 font-bold">PDF Slides</span>}
+            {activeTab === 'screenshare' && <span className="text-purple-500 font-bold">Screen Share</span>}
+            {activeTab === 'interaction' && <span className="text-emerald-500 font-bold">Video Call</span>}
+          </div>
         )}
-        <Clock className="h-3.5 w-3.5 text-muted-foreground hidden xs:inline" />
-        <span className="font-semibold tracking-wider">
-          {formatDuration(elapsedSeconds)}
-        </span>
       </div>
 
       {/* Right: Actions */}
@@ -140,7 +159,7 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
             variant={isParticipantOpen ? 'secondary' : 'outline'}
             size="sm"
             onClick={onToggleParticipants}
-            className="flex items-center gap-1.5 px-2 sm:px-2.5 h-8 text-xs font-medium transition-all"
+            className="relative flex items-center gap-1.5 px-2 sm:px-2.5 h-8 text-xs font-medium transition-all"
             aria-label={isParticipantOpen ? 'Hide participants' : 'Show participants'}
             title={isParticipantOpen ? 'Hide participants panel' : 'Show participants panel'}
           >
@@ -149,6 +168,11 @@ export const ClassroomHeader: React.FC<ClassroomHeaderProps> = ({
             <span className="hidden sm:inline text-muted-foreground">
               {isParticipantOpen ? 'Hide' : 'Participants'}
             </span>
+            {pendingRequestsCount > 0 && (
+              <span className="ml-1 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-bounce">
+                {pendingRequestsCount} new
+              </span>
+            )}
           </Button>
         )}
 

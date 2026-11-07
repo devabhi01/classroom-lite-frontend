@@ -25,7 +25,7 @@ export interface CreateClassroomDto {
   institutionId?: string;
 }
 
-export type WorkspaceTab = 'pdf' | 'whiteboard' | 'screenshare';
+export type WorkspaceTab = 'pdf' | 'whiteboard' | 'screenshare' | 'interaction';
 
 export interface ClassroomFullState {
   classroom: Classroom;

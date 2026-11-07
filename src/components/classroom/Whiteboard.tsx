@@ -76,7 +76,8 @@ export const Whiteboard: React.FC<WhiteboardProps> = ({
         onColorChange={setColor}
         strokeWidth={strokeWidth}
         onStrokeWidthChange={setStrokeWidth}
-        onClear={clearWhiteboard}
+        onClear={isHost ? clearWhiteboard : undefined}
+        isHost={isHost}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
       />

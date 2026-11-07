@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Edit3, Monitor, MonitorStop } from 'lucide-react';
+import { FileText, Edit3, Monitor, MonitorStop, Video, VideoOff, Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { WorkspaceTab } from '@/types/classroom';
 
@@ -10,6 +10,10 @@ interface ClassroomControlsProps {
   isScreenSharing: boolean;
   onStartScreenShare: () => void;
   onStopScreenShare: () => void;
+  audioEnabled?: boolean;
+  videoEnabled?: boolean;
+  onToggleAudio?: () => void;
+  onToggleVideo?: () => void;
 }
 
 export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
@@ -19,64 +23,111 @@ export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
   isScreenSharing,
   onStartScreenShare,
   onStopScreenShare,
+  audioEnabled,
+  videoEnabled,
+  onToggleAudio,
+  onToggleVideo,
 }) => {
   return (
-    <footer className="flex h-16 w-full items-center justify-between border-t border-border bg-card px-4 sm:px-6 shadow-sm select-none">
+    <footer className="flex h-16 w-full items-center justify-between border-t border-border bg-card px-3 sm:px-6 shadow-sm select-none gap-2">
       {/* Workspace Switcher Tabs */}
-      <div className="flex items-center space-x-1 sm:space-x-2 rounded-lg bg-muted p-1">
+      <div className="flex items-center space-x-1 sm:space-x-2 rounded-lg bg-muted p-1 overflow-x-auto">
         <button
           onClick={() => onTabChange('whiteboard')}
-          className={`flex items-center space-x-1.5 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+          className={`flex items-center space-x-1.5 rounded-md px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'whiteboard'
               ? 'bg-background text-foreground shadow-sm font-semibold'
               : 'text-muted-foreground hover:text-foreground'
           }`}
           title="Whiteboard"
         >
-          <Edit3 className="h-4 w-4 text-primary" />
-          <span>Whiteboard</span>
+          <Edit3 className="h-4 w-4 text-primary shrink-0" />
+          <span className="hidden xs:inline">Whiteboard</span>
         </button>
 
         <button
           onClick={() => onTabChange('pdf')}
-          className={`flex items-center space-x-1.5 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+          className={`flex items-center space-x-1.5 rounded-md px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'pdf'
               ? 'bg-background text-foreground shadow-sm font-semibold'
               : 'text-muted-foreground hover:text-foreground'
           }`}
           title="PDF Presentation"
         >
-          <FileText className="h-4 w-4 text-blue-500" />
-          <span>PDF Presentation</span>
+          <FileText className="h-4 w-4 text-blue-500 shrink-0" />
+          <span className="hidden xs:inline">PDF</span>
+          <span className="hidden md:inline">Presentation</span>
         </button>
 
         <button
           onClick={() => onTabChange('screenshare')}
-          className={`flex items-center space-x-1.5 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all cursor-pointer ${
+          className={`flex items-center space-x-1.5 rounded-md px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'screenshare'
               ? 'bg-background text-foreground shadow-sm font-semibold'
               : 'text-muted-foreground hover:text-foreground'
           }`}
           title="Screen Share"
         >
-          <Monitor className="h-4 w-4 text-emerald-500" />
-          <span>Screen Share</span>
+          <Monitor className="h-4 w-4 text-purple-500 shrink-0" />
+          <span className="hidden xs:inline">Screen Share</span>
+        </button>
+
+        <button
+          onClick={() => onTabChange('interaction')}
+          className={`flex items-center space-x-1.5 rounded-md px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium transition-all cursor-pointer whitespace-nowrap ${
+            activeTab === 'interaction'
+              ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+              : 'text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+          }`}
+          title="Interaction Mode (WhatsApp-style Video Call)"
+        >
+          <Video className={`h-4 w-4 shrink-0 ${activeTab === 'interaction' ? 'text-white' : 'text-emerald-500'}`} />
+          <span className="font-semibold">Interaction</span>
+          <span className="hidden sm:inline">Mode</span>
         </button>
       </div>
 
-      {/* Screen Sharing Quick Toggle (Host Only) */}
-      <div className="flex items-center space-x-2">
+      {/* Quick Host Actions: Mic, Camera, Screen Sharing */}
+      <div className="flex items-center space-x-2 shrink-0">
+        {isHost && onToggleAudio && (
+          <Button
+            variant={audioEnabled ? 'outline' : 'destructive'}
+            size="sm"
+            onClick={onToggleAudio}
+            className={`h-9 px-2.5 text-xs font-medium cursor-pointer ${
+              !audioEnabled ? 'animate-pulse' : ''
+            }`}
+            title={audioEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
+          >
+            {audioEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            <span className="hidden md:inline ml-1.5">{audioEnabled ? 'Mute' : 'Unmute'}</span>
+          </Button>
+        )}
+
+        {isHost && onToggleVideo && (
+          <Button
+            variant={videoEnabled ? 'outline' : 'destructive'}
+            size="sm"
+            onClick={onToggleVideo}
+            className="h-9 px-2.5 text-xs font-medium cursor-pointer"
+            title={videoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
+          >
+            {videoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+            <span className="hidden md:inline ml-1.5">{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
+          </Button>
+        )}
+
         {isHost ? (
           isScreenSharing ? (
             <Button
               variant="destructive"
               size="sm"
               onClick={onStopScreenShare}
-              className="h-9 px-3 text-xs sm:text-sm font-medium animate-pulse"
+              className="h-9 px-3 text-xs sm:text-sm font-medium animate-pulse cursor-pointer"
             >
               <MonitorStop className="mr-1.5 h-4 w-4" />
               <span className="hidden sm:inline">Stop Screen Share</span>
-              <span className="sm:hidden">Stop Share</span>
+              <span className="sm:hidden">Stop</span>
             </Button>
           ) : (
             <Button
@@ -86,9 +137,9 @@ export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
                 onTabChange('screenshare');
                 onStartScreenShare();
               }}
-              className="h-9 px-3 text-xs sm:text-sm font-medium"
+              className="h-9 px-3 text-xs sm:text-sm font-medium cursor-pointer"
             >
-              <Monitor className="mr-1.5 h-4 w-4 text-emerald-600" />
+              <Monitor className="mr-1.5 h-4 w-4 text-purple-600" />
               <span className="hidden sm:inline">Share Screen</span>
               <span className="sm:hidden">Share</span>
             </Button>
@@ -96,8 +147,8 @@ export const ClassroomControls: React.FC<ClassroomControlsProps> = ({
         ) : (
           <div className="text-xs text-muted-foreground hidden sm:block">
             {isScreenSharing ? (
-              <span className="flex items-center text-emerald-600 font-medium">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping mr-1.5" />
+              <span className="flex items-center text-purple-600 font-medium">
+                <span className="h-2 w-2 rounded-full bg-purple-500 animate-ping mr-1.5" />
                 Live Screen Stream Active
               </span>
             ) : (

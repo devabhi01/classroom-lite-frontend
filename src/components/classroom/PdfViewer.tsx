@@ -85,6 +85,37 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const activeDrawPageRef = useRef<number>(1);
+  const pendingAnnotationRef = useRef<{
+    event: 'pdf:annotate' | 'pdf:erase';
+    data: PageAnnotationOp & { page: number };
+  } | null>(null);
+  const annotationFrameRef = useRef<number | null>(null);
+
+  const flushAnnotation = useCallback(() => {
+    annotationFrameRef.current = null;
+    const pending = pendingAnnotationRef.current;
+    pendingAnnotationRef.current = null;
+    if (pending && socket?.connected) {
+      socket.emit(pending.event, { classroomCode, data: pending.data });
+    }
+  }, [socket, classroomCode]);
+
+  const queueAnnotation = useCallback((event: 'pdf:annotate' | 'pdf:erase', op: PageAnnotationOp, page: number) => {
+    const pending = pendingAnnotationRef.current;
+    if (pending && pending.event === event && pending.data.page === page) {
+      pending.data.x2 = op.x2;
+      pending.data.y2 = op.y2;
+    } else {
+      pendingAnnotationRef.current = { event, data: { ...op, page } };
+    }
+    if (annotationFrameRef.current === null) {
+      annotationFrameRef.current = requestAnimationFrame(flushAnnotation);
+    }
+  }, [flushAnnotation]);
+
+  useEffect(() => () => {
+    if (annotationFrameRef.current !== null) cancelAnimationFrame(annotationFrameRef.current);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!containerRef.current) return;
@@ -276,12 +307,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         // Instantaneous local render directly to canvas (0ms lag)
         if (ctx) drawStrokeOnOverlay(ctx, op, canvas.width, canvas.height);
 
-        if (socket && socket.connected) {
-          socket.emit('pdf:annotate', {
-            classroomCode,
-            data: { ...op, page: pageToAnnotate },
-          });
-        }
+        queueAnnotation('pdf:annotate', op, pageToAnnotate);
       } else if (annotationTool === 'eraser') {
         const op: PageAnnotationOp = {
           type: 'erase',
@@ -300,20 +326,20 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         // Instantaneous local erase (0ms lag)
         if (ctx) drawStrokeOnOverlay(ctx, op, canvas.width, canvas.height);
 
-        if (socket && socket.connected) {
-          socket.emit('pdf:erase', {
-            classroomCode,
-            data: { ...op, page: pageToAnnotate },
-          });
-        }
+        queueAnnotation('pdf:erase', op, pageToAnnotate);
       }
 
       lastPointRef.current = p2;
     },
-    [pdfState, annotationTool, annotationColor, annotationStrokeWidth, drawStrokeOnOverlay, socket, classroomCode]
+    [pdfState, annotationTool, annotationColor, annotationStrokeWidth, drawStrokeOnOverlay, queueAnnotation]
   );
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (annotationFrameRef.current !== null) {
+      cancelAnimationFrame(annotationFrameRef.current);
+      annotationFrameRef.current = null;
+    }
+    flushAnnotation();
     isDrawingRef.current = false;
     lastPointRef.current = null;
     try {
@@ -326,7 +352,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
     // Commit annotations to React state on stroke completion (single clean render)
     setPageAnnotations({ ...pageAnnotationsRef.current });
-  }, []);
+  }, [flushAnnotation]);
 
   const handleClearPageAnnotations = useCallback(() => {
     if (!pdfState) return;

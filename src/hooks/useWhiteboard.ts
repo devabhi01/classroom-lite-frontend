@@ -27,6 +27,42 @@ export const useWhiteboard = ({
   const operationsRef = useRef<WhiteboardOperation[]>(initialOperations);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingSocketOpRef = useRef<WhiteboardOperation | null>(null);
+  const socketFrameRef = useRef<number | null>(null);
+
+  // Keep local drawing immediate, but send at most one compact segment per
+  // display frame instead of one Socket.IO message for every pointer event.
+  const flushSocketOp = useCallback(() => {
+    socketFrameRef.current = null;
+    const op = pendingSocketOpRef.current;
+    pendingSocketOpRef.current = null;
+    if (!op || !socket?.connected) return;
+    const event = op.type === 'erase' ? 'whiteboard:erase' : 'whiteboard:draw';
+    socket.emit(event, {
+      classroomCode,
+      userId,
+      ...op,
+      data: { ...op, userId },
+    });
+  }, [socket, classroomCode, userId]);
+
+  const queueSocketOp = useCallback((op: WhiteboardOperation) => {
+    if (op.type === 'clear') return;
+    const pending = pendingSocketOpRef.current;
+    if (pending && pending.type === op.type) {
+      pending.x2 = op.x2;
+      pending.y2 = op.y2;
+    } else {
+      pendingSocketOpRef.current = { ...op };
+    }
+    if (socketFrameRef.current === null) {
+      socketFrameRef.current = requestAnimationFrame(flushSocketOp);
+    }
+  }, [flushSocketOp]);
+
+  useEffect(() => () => {
+    if (socketFrameRef.current !== null) cancelAnimationFrame(socketFrameRef.current);
+  }, []);
 
   // Helper to replay a single operation onto canvas
   const drawOperationOnCanvas = useCallback(
@@ -96,8 +132,8 @@ export const useWhiteboard = ({
     if (!parent) return;
 
     const rect = parent.getBoundingClientRect();
-    const targetWidth = Math.floor(rect.width);
-    const targetHeight = Math.floor(rect.height);
+    const targetWidth = Math.floor(rect.width) || parent.clientWidth;
+    const targetHeight = Math.floor(rect.height) || parent.clientHeight;
 
     if (targetWidth > 0 && targetHeight > 0) {
       if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
@@ -117,10 +153,13 @@ export const useWhiteboard = ({
     }
   }, [initialOperations, redrawAll]);
 
-  // Setup canvas resize listener with ResizeObserver
+  // Setup canvas resize listener with ResizeObserver and staggered timers for immediate layout paint
   useEffect(() => {
     resizeCanvas();
-    const t = setTimeout(resizeCanvas, 80);
+    const t1 = setTimeout(resizeCanvas, 50);
+    const t2 = setTimeout(resizeCanvas, 150);
+    const t3 = setTimeout(resizeCanvas, 350);
+    const t4 = setTimeout(resizeCanvas, 750);
     window.addEventListener('resize', resizeCanvas);
 
     let observer: ResizeObserver | null = null;
@@ -132,7 +171,10 @@ export const useWhiteboard = ({
     }
 
     return () => {
-      clearTimeout(t);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
       window.removeEventListener('resize', resizeCanvas);
       if (observer) observer.disconnect();
     };
@@ -253,12 +295,21 @@ export const useWhiteboard = ({
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      canvas.setPointerCapture(e.pointerId);
+      try {
+        canvas.setPointerCapture(e.pointerId);
+      } catch {}
       isDrawingRef.current = true;
 
-      const rect = canvas.getBoundingClientRect();
-      const currentX = (e.clientX - rect.left) / rect.width;
-      const currentY = (e.clientY - rect.top) / rect.height;
+      let rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height || canvas.width === 0 || canvas.height === 0) {
+        resizeCanvas();
+        rect = canvas.getBoundingClientRect();
+      }
+
+      const rw = rect.width || canvas.width || 800;
+      const rh = rect.height || canvas.height || 600;
+      const currentX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rw));
+      const currentY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rh));
 
       lastPointRef.current = { x: currentX, y: currentY };
 
@@ -267,8 +318,8 @@ export const useWhiteboard = ({
       if (ctx) {
         ctx.save();
         ctx.beginPath();
-        const pxX = currentX * canvas.width;
-        const pxY = currentY * canvas.height;
+        const pxX = currentX * (canvas.width || rw);
+        const pxY = currentY * (canvas.height || rh);
         const radius = Math.max(1, (strokeWidth * (tool === 'eraser' ? 3.5 : 1)) / 2);
 
         if (tool === 'pen') {
@@ -284,7 +335,7 @@ export const useWhiteboard = ({
         ctx.restore();
       }
     },
-    [color, strokeWidth, tool]
+    [color, strokeWidth, tool, resizeCanvas]
   );
 
   const handlePointerMove = useCallback(
@@ -293,17 +344,24 @@ export const useWhiteboard = ({
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const rect = canvas.getBoundingClientRect();
-      const currentX = (e.clientX - rect.left) / rect.width;
-      const currentY = (e.clientY - rect.top) / rect.height;
+      let rect = canvas.getBoundingClientRect();
+      if (!rect.width || !rect.height || canvas.width === 0 || canvas.height === 0) {
+        resizeCanvas();
+        rect = canvas.getBoundingClientRect();
+      }
+
+      const rw = rect.width || canvas.width || 800;
+      const rh = rect.height || canvas.height || 600;
+      const currentX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rw));
+      const currentY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rh));
 
       const p1 = lastPointRef.current;
       const p2 = { x: currentX, y: currentY };
 
       // Ignore zero-distance movement
-      const dx = (p2.x - p1.x) * rect.width;
-      const dy = (p2.y - p1.y) * rect.height;
-      if (dx * dx + dy * dy < 0.5) return;
+      const dx = (p2.x - p1.x) * rw;
+      const dy = (p2.y - p1.y) * rh;
+      if (dx * dx + dy * dy < 0.25) return;
 
       const canvasWidth = canvas.width;
       const canvasHeight = canvas.height;
@@ -338,14 +396,7 @@ export const useWhiteboard = ({
           ctx.restore();
         }
 
-        if (socket && socket.connected) {
-          socket.emit('whiteboard:draw', {
-            classroomCode,
-            userId,
-            ...drawData,
-            data: { ...drawData, userId },
-          });
-        }
+        queueSocketOp({ type: 'draw', ...drawData });
       } else if (tool === 'eraser') {
         const eraseWidth = strokeWidth * 3.5;
         const eraseData: EraseData = {
@@ -374,23 +425,21 @@ export const useWhiteboard = ({
           ctx.restore();
         }
 
-        if (socket && socket.connected) {
-          socket.emit('whiteboard:erase', {
-            classroomCode,
-            userId,
-            ...eraseData,
-            data: { ...eraseData, userId },
-          });
-        }
+        queueSocketOp({ type: 'erase', ...eraseData });
       }
 
       lastPointRef.current = p2;
     },
-    [tool, color, strokeWidth, socket, classroomCode, userId]
+    [tool, color, strokeWidth, queueSocketOp, resizeCanvas]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (socketFrameRef.current !== null) {
+        cancelAnimationFrame(socketFrameRef.current);
+        socketFrameRef.current = null;
+      }
+      flushSocketOp();
       isDrawingRef.current = false;
       lastPointRef.current = null;
       try {
@@ -404,10 +453,15 @@ export const useWhiteboard = ({
       // Synchronize operations array to React state on stroke completion (single clean re-render)
       setOperations([...operationsRef.current]);
     },
-    []
+    [flushSocketOp]
   );
 
   const clearWhiteboard = useCallback(() => {
+    if (socketFrameRef.current !== null) {
+      cancelAnimationFrame(socketFrameRef.current);
+      socketFrameRef.current = null;
+    }
+    pendingSocketOpRef.current = null;
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');
