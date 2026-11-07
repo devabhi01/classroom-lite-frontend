@@ -146,19 +146,6 @@ const ContinuousPageCard: React.FC<ContinuousPageCardProps> = ({
         renderTaskRef.current = renderTask;
         await renderTask.promise;
 
-        // Synchronize overlay canvas dimensions
-        const overlay = overlayCanvasRef.current;
-        if (overlay) {
-          overlay.width = w;
-          overlay.height = h;
-          const overlayCtx = overlay.getContext('2d');
-          if (overlayCtx) {
-            overlayCtx.clearRect(0, 0, w, h);
-            annotations.forEach((op) => {
-              drawStrokeOnOverlay(overlayCtx, op, w, h);
-            });
-          }
-        }
       } catch (err: any) {
         if (err?.name !== 'RenderingCancelledException') {
           // Non-critical cancel error
@@ -176,7 +163,7 @@ const ContinuousPageCard: React.FC<ContinuousPageCardProps> = ({
         } catch {}
       }
     };
-  }, [isNearViewport, pdfDoc, pageNumber, zoom, annotations, drawStrokeOnOverlay]);
+  }, [isNearViewport, pdfDoc, pageNumber, zoom]);
 
   // Redraw annotations on overlay whenever annotations change
   useEffect(() => {
@@ -185,11 +172,25 @@ const ContinuousPageCard: React.FC<ContinuousPageCardProps> = ({
     const ctx = overlay.getContext('2d');
     if (!ctx) return;
 
+    // The PDF page is static while users draw. Redraw only the lightweight
+    // annotation layer so a stroke never restarts the PDF.js page renderer.
     ctx.clearRect(0, 0, overlay.width, overlay.height);
     annotations.forEach((op) => {
       drawStrokeOnOverlay(ctx, op, overlay.width, overlay.height);
     });
   }, [annotations, drawStrokeOnOverlay]);
+
+  useEffect(() => {
+    const overlay = overlayCanvasRef.current;
+    const pageCanvas = canvasRef.current;
+    if (!overlay || !pageCanvas || !pageCanvas.width || !pageCanvas.height) return;
+    if (overlay.width === pageCanvas.width && overlay.height === pageCanvas.height) return;
+    overlay.width = pageCanvas.width;
+    overlay.height = pageCanvas.height;
+    const ctx = overlay.getContext('2d');
+    if (!ctx) return;
+    annotations.forEach((op) => drawStrokeOnOverlay(ctx, op, overlay.width, overlay.height));
+  }, [pageSize, annotations, drawStrokeOnOverlay]);
 
   return (
     <div

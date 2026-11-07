@@ -27,6 +27,42 @@ export const useWhiteboard = ({
   const operationsRef = useRef<WhiteboardOperation[]>(initialOperations);
   const isDrawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const pendingSocketOpRef = useRef<WhiteboardOperation | null>(null);
+  const socketFrameRef = useRef<number | null>(null);
+
+  // Keep local drawing immediate, but send at most one compact segment per
+  // display frame instead of one Socket.IO message for every pointer event.
+  const flushSocketOp = useCallback(() => {
+    socketFrameRef.current = null;
+    const op = pendingSocketOpRef.current;
+    pendingSocketOpRef.current = null;
+    if (!op || !socket?.connected) return;
+    const event = op.type === 'erase' ? 'whiteboard:erase' : 'whiteboard:draw';
+    socket.emit(event, {
+      classroomCode,
+      userId,
+      ...op,
+      data: { ...op, userId },
+    });
+  }, [socket, classroomCode, userId]);
+
+  const queueSocketOp = useCallback((op: WhiteboardOperation) => {
+    if (op.type === 'clear') return;
+    const pending = pendingSocketOpRef.current;
+    if (pending && pending.type === op.type) {
+      pending.x2 = op.x2;
+      pending.y2 = op.y2;
+    } else {
+      pendingSocketOpRef.current = { ...op };
+    }
+    if (socketFrameRef.current === null) {
+      socketFrameRef.current = requestAnimationFrame(flushSocketOp);
+    }
+  }, [flushSocketOp]);
+
+  useEffect(() => () => {
+    if (socketFrameRef.current !== null) cancelAnimationFrame(socketFrameRef.current);
+  }, []);
 
   // Helper to replay a single operation onto canvas
   const drawOperationOnCanvas = useCallback(
@@ -360,14 +396,7 @@ export const useWhiteboard = ({
           ctx.restore();
         }
 
-        if (socket && socket.connected) {
-          socket.emit('whiteboard:draw', {
-            classroomCode,
-            userId,
-            ...drawData,
-            data: { ...drawData, userId },
-          });
-        }
+        queueSocketOp({ type: 'draw', ...drawData });
       } else if (tool === 'eraser') {
         const eraseWidth = strokeWidth * 3.5;
         const eraseData: EraseData = {
@@ -396,23 +425,21 @@ export const useWhiteboard = ({
           ctx.restore();
         }
 
-        if (socket && socket.connected) {
-          socket.emit('whiteboard:erase', {
-            classroomCode,
-            userId,
-            ...eraseData,
-            data: { ...eraseData, userId },
-          });
-        }
+        queueSocketOp({ type: 'erase', ...eraseData });
       }
 
       lastPointRef.current = p2;
     },
-    [tool, color, strokeWidth, socket, classroomCode, userId]
+    [tool, color, strokeWidth, queueSocketOp, resizeCanvas]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (socketFrameRef.current !== null) {
+        cancelAnimationFrame(socketFrameRef.current);
+        socketFrameRef.current = null;
+      }
+      flushSocketOp();
       isDrawingRef.current = false;
       lastPointRef.current = null;
       try {
@@ -426,10 +453,15 @@ export const useWhiteboard = ({
       // Synchronize operations array to React state on stroke completion (single clean re-render)
       setOperations([...operationsRef.current]);
     },
-    []
+    [flushSocketOp]
   );
 
   const clearWhiteboard = useCallback(() => {
+    if (socketFrameRef.current !== null) {
+      cancelAnimationFrame(socketFrameRef.current);
+      socketFrameRef.current = null;
+    }
+    pendingSocketOpRef.current = null;
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext('2d');

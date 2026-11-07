@@ -46,24 +46,22 @@ export const useVoiceChat = ({
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
 
-  // Helper to attach local stream tracks to a peer connection with Full HD adaptive encoding
+  // Attach local tracks with a bitrate cap that leaves room for multiple peers.
   const addLocalTracksToPc = (pc: RTCPeerConnection, stream: MediaStream) => {
     const existingSenders = pc.getSenders();
     stream.getTracks().forEach((track) => {
       const alreadyAdded = existingSenders.some((s) => s.track?.id === track.id);
       if (!alreadyAdded) {
         const sender = pc.addTrack(track, stream);
-        // Optimize video encoding parameters for Full HD with automatic network adaptation
+        // Prefer a responsive call over pushing unnecessary Full HD webcam traffic.
         if (track.kind === 'video' && sender && sender.getParameters) {
           try {
             const params = sender.getParameters();
             if (!params.encodings || params.encodings.length === 0) {
               params.encodings = [{}];
             }
-            // Target up to 2.5 Mbps for 1080p Full HD
-            params.encodings[0].maxBitrate = 2500000;
-            // WebRTC degradation preference: 'balanced' automatically downscales resolution & framerate
-            // under network congestion/low bandwidth, and automatically restores 1080p when network stabilizes
+            params.encodings[0].maxBitrate = 1200000;
+            // Let WebRTC adapt resolution and frame rate when bandwidth is tight.
             params.degradationPreference = 'balanced';
             sender.setParameters(params).catch((err) => {
               console.warn('Could not set video sender parameters:', err);
@@ -126,16 +124,32 @@ export const useVoiceChat = ({
 
       // Connection state monitoring
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-          // Remove remote stream on permanent disconnect
-          if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        if (pc.connectionState === 'closed') {
             setRemoteStreams((prev) => {
               const updated = new Map(prev);
               updated.delete(peerId);
               return updated;
             });
             peerConnectionsRef.current.delete(peerId);
-          }
+        }
+      };
+
+      // A transient network change should recover the call instead of dropping
+      // the peer permanently. The remote peer already handles offer collisions.
+      pc.oniceconnectionstatechange = async () => {
+        if (pc.iceConnectionState !== 'failed' || !socket?.connected || pc.signalingState !== 'stable') return;
+        try {
+          const offer = await pc.createOffer({ iceRestart: true });
+          await pc.setLocalDescription(offer);
+          socket.emit('voicechat:offer', {
+            classroomCode,
+            targetUserId: peerId,
+            fromUserId: userId,
+            fromUserName: userName,
+            offer,
+          });
+        } catch (error) {
+          console.warn('Could not restart the voice/video connection:', error);
         }
       };
 
@@ -194,9 +208,9 @@ export const useVoiceChat = ({
             },
             video: withVideo
               ? {
-                  width: { ideal: 1920, max: 1920, min: 640 },
-                  height: { ideal: 1080, max: 1080, min: 360 },
-                  frameRate: { ideal: 30, max: 30, min: 15 },
+                  width: { ideal: 1280, max: 1920, min: 640 },
+                  height: { ideal: 720, max: 1080, min: 360 },
+                  frameRate: { ideal: 24, max: 30, min: 15 },
                   facingMode: 'user',
                 }
               : false,
@@ -294,14 +308,14 @@ export const useVoiceChat = ({
     if (!localStreamRef.current) return;
     const videoTracks = localStreamRef.current.getVideoTracks();
 
-    // If no video track exists yet (joined audio-only), acquire 1080p camera stream
+    // If no video track exists yet (joined audio-only), request a moderate camera profile.
     if (videoTracks.length === 0) {
       try {
         const videoStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 1920, max: 1920, min: 640 },
-            height: { ideal: 1080, max: 1080, min: 360 },
-            frameRate: { ideal: 30, max: 30, min: 15 },
+            width: { ideal: 1280, max: 1920, min: 640 },
+            height: { ideal: 720, max: 1080, min: 360 },
+            frameRate: { ideal: 24, max: 30, min: 15 },
             facingMode: 'user',
           },
         });
@@ -321,7 +335,7 @@ export const useVoiceChat = ({
               videoMuted: false,
             });
           }
-          toast.success('Camera activated in Full HD');
+          toast.success('Camera activated');
         }
       } catch (err) {
         toast.error('Could not access camera');

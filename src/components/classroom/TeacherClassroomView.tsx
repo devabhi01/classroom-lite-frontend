@@ -83,7 +83,6 @@ export const TeacherClassroomView: React.FC<TeacherClassroomViewProps> = ({
 }) => {
   const [mobileParticipantsOpen, setMobileParticipantsOpen] = useState(false);
   const [isParticipantPanelOpen, setIsParticipantPanelOpen] = useState(true);
-
   const toggleParticipants = () => {
     if (window.innerWidth < 768) {
       setMobileParticipantsOpen(!mobileParticipantsOpen);

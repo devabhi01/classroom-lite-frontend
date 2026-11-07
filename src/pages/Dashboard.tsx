@@ -39,6 +39,7 @@ export const Dashboard: React.FC = () => {
   const [analytics, setAnalytics] = useState<{
     totalSessions: number;
     activeSessions: number;
+    activeParticipants: number;
     totalTimeFormatted: string;
     studentsOrTeachersCount: number;
     avgDurationFormatted: string;
@@ -46,6 +47,7 @@ export const Dashboard: React.FC = () => {
   const [isLoadingClassrooms, setIsLoadingClassrooms] = useState(true);
   const [isLoadingInstitutions, setIsLoadingInstitutions] = useState(true);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [analyticsUpdatedAt, setAnalyticsUpdatedAt] = useState<Date | null>(null);
 
   // Dialog States
   const [isJoinInstOpen, setIsJoinInstOpen] = useState(false);
@@ -68,78 +70,90 @@ export const Dashboard: React.FC = () => {
     setIsLoadingInstitutions(loading);
   };
 
-  const fetchClassrooms = async () => {
-    try {
-      setIsLoadingClassrooms(true);
-      // Fetch host classrooms or available classrooms
-      const res = await api.get('/classrooms');
-      const list = res.data?.data || res.data?.classrooms || (Array.isArray(res.data) ? res.data : []);
-      if (Array.isArray(list)) {
-        setRecentClassrooms(list);
-        localStorage.setItem('tdp_recent_classrooms', JSON.stringify(list));
-      } else {
-        // Fallback to local cache if empty
-        const cached = localStorage.getItem('tdp_recent_classrooms');
-        if (cached) {
-          setRecentClassrooms(JSON.parse(cached));
-        }
-      }
-    } catch {
-      // Fallback to recent classrooms saved locally
-      try {
-        const cached = localStorage.getItem('tdp_recent_classrooms');
-        if (cached) {
-          setRecentClassrooms(JSON.parse(cached));
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    } finally {
-      setIsLoadingClassrooms(false);
-    }
-  };
-
   useEffect(() => {
-    fetchClassrooms();
     fetchInstitutions();
 
     const fetchAnalytics = async () => {
       try {
-        const res = await api.get('/analytics/overview');
-        const d = res.data?.data || res.data;
-        if (d) {
-          if (isStudent && d.studentSummary) {
-            setAnalytics({
-              totalSessions: d.studentSummary.totalAttended || 0,
-              activeSessions: d.studentSummary.activeSessions || 0,
-              totalTimeFormatted: d.studentSummary.totalLearningTimeFormatted || '0s',
-              studentsOrTeachersCount: d.studentSummary.teachersEncountered || 0,
-              avgDurationFormatted: d.studentSummary.avgSessionDurationFormatted || '0s',
-            });
-          } else if (d.teacherSummary) {
-            setAnalytics({
-              totalSessions: d.teacherSummary.totalHosted || 0,
-              activeSessions: d.teacherSummary.activeSessions || 0,
-              totalTimeFormatted: d.teacherSummary.totalTeachingTimeFormatted || '0s',
-              studentsOrTeachersCount: d.teacherSummary.uniqueStudentsCount || 0,
-              avgDurationFormatted: d.teacherSummary.avgDurationFormatted || '0s',
-            });
-          }
+        const historyPath = isStudent ? '/classrooms/history/student' : '/classrooms/history/teacher';
+        const [historyResponse, classroomsResponse] = await Promise.all([
+          api.get(historyPath),
+          api.get('/classrooms'),
+        ]);
+        const rows = historyResponse.data?.data || historyResponse.data || [];
+        const classrooms = classroomsResponse.data?.data || classroomsResponse.data || [];
+        const history = Array.isArray(rows) ? rows : [];
+        const liveRooms = Array.isArray(classrooms) ? classrooms : [];
+        setRecentClassrooms(liveRooms);
+        localStorage.setItem('tdp_recent_classrooms', JSON.stringify(liveRooms));
+
+        const formatDuration = (seconds: number) => {
+          const safeSeconds = Math.max(0, Math.floor(seconds));
+          const hours = Math.floor(safeSeconds / 3600);
+          const minutes = Math.floor((safeSeconds % 3600) / 60);
+          const remainingSeconds = safeSeconds % 60;
+          if (hours) return `${hours}h ${minutes}m`;
+          if (minutes) return `${minutes}m ${remainingSeconds}s`;
+          return `${remainingSeconds}s`;
+        };
+
+        const activeSessions = liveRooms.filter((room: any) => room.status === 'ACTIVE').length;
+        const activeParticipants = liveRooms.reduce(
+          (sum: number, room: any) => sum + Number(room.activeParticipantCount || 0),
+          0,
+        );
+        if (isStudent) {
+          const attendanceSeconds = (room: any) => {
+            const joinedAt = room.myAttendance?.joinedAt ? new Date(room.myAttendance.joinedAt).getTime() : 0;
+            const elapsed = room.status === 'ACTIVE' && joinedAt && !room.myAttendance?.leftAt
+              ? Math.max(0, Math.floor((Date.now() - joinedAt) / 1000))
+              : 0;
+            return Number(room.myAttendance?.durationSeconds || 0) + elapsed;
+          };
+          const totalSeconds = history.reduce((sum: number, room: any) => sum + attendanceSeconds(room), 0);
+          const avgSeconds = history.length ? Math.round(totalSeconds / history.length) : 0;
+          setAnalytics({
+            totalSessions: history.length,
+            activeSessions,
+            activeParticipants,
+            totalTimeFormatted: formatDuration(totalSeconds),
+            studentsOrTeachersCount: new Set(history.map((room: any) => room.host?.id).filter(Boolean)).size,
+            avgDurationFormatted: formatDuration(avgSeconds),
+          });
+        } else {
+          const totalSeconds = history.reduce((sum: number, room: any) => sum + Number(room.totalClassDurationSeconds || 0), 0);
+          const attendees = history.flatMap((room: any) =>
+            (room.participants || []).filter((participant: any) => participant.role === 'STUDENT' && ['ACCEPTED', 'LEFT'].includes(participant.status)),
+          );
+          setAnalytics({
+            totalSessions: history.length,
+            activeSessions,
+            activeParticipants,
+            totalTimeFormatted: formatDuration(totalSeconds),
+            studentsOrTeachersCount: new Set(attendees.map((participant: any) => participant.userId)).size,
+            avgDurationFormatted: formatDuration(history.length ? Math.round(totalSeconds / history.length) : 0),
+          });
         }
-      } catch {
-        // Fallback calculation will handle
+        setAnalyticsUpdatedAt(new Date());
+      } catch (error) {
+        console.warn('Unable to refresh dashboard analytics:', error);
+      } finally {
+        setIsLoadingClassrooms(false);
       }
     };
 
     fetchAnalytics();
+    const refreshTimer = window.setInterval(fetchAnalytics, 15000);
+    return () => window.clearInterval(refreshTimer);
   }, [isStudent]);
 
   const displayAnalytics = analytics || {
-    totalSessions: recentClassrooms.length,
+    totalSessions: 0,
     activeSessions: recentClassrooms.filter((r) => r.status === 'ACTIVE').length,
-    totalTimeFormatted: recentClassrooms.length > 0 ? `${recentClassrooms.length * 30}m` : '0s',
-    studentsOrTeachersCount: isStudent ? Math.min(3, recentClassrooms.length) : recentClassrooms.length * 4,
-    avgDurationFormatted: recentClassrooms.length > 0 ? '30m' : '0s',
+    activeParticipants: recentClassrooms.reduce((sum, room) => sum + Number((room as any).activeParticipantCount || 0), 0),
+    totalTimeFormatted: '0s',
+    studentsOrTeachersCount: 0,
+    avgDurationFormatted: '0s',
   };
 
   const handleCopy = async (code: string) => {
@@ -243,6 +257,11 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center space-x-2">
             <BarChart3 className="h-4 w-4 text-primary" />
             <h2 className="text-base font-semibold text-foreground">Session Analytics & Insights</h2>
+            <span className="hidden text-[11px] text-muted-foreground sm:inline">
+              {analyticsUpdatedAt
+                ? `Live · updated ${analyticsUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+                : 'Loading live data…'}
+            </span>
           </div>
           <Link
             to="/analytics"
@@ -304,7 +323,7 @@ export const Dashboard: React.FC = () => {
               {displayAnalytics.activeSessions} Active
             </div>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Live interactive rooms
+              {displayAnalytics.activeParticipants} participants online
             </p>
           </Card>
         </div>

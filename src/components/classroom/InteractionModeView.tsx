@@ -7,12 +7,10 @@ import {
   PhoneOff,
   Maximize2,
   Minimize2,
-  FlipHorizontal,
   RotateCw,
   Edit3,
   FileText,
   Monitor,
-  Users,
   ArrowLeftRight,
   Crown,
   GraduationCap,
@@ -55,7 +53,6 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isSwapped, setIsSwapped] = useState(false);
-  const [localMirrored, setLocalMirrored] = useState(true);
 
   // Filter other participants in the room (excluding current user)
   const otherParticipants = participants.filter((p) => p.userId !== currentUserId);
@@ -176,7 +173,7 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
                   autoPlay
                   playsInline
                   muted
-                  className={`w-full h-full object-cover ${localMirrored ? 'scale-x-[-1]' : ''}`}
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center gap-3 text-zinc-400">
@@ -216,7 +213,7 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
                     autoPlay
                     playsInline
                     muted
-                    className={`w-full h-full object-cover ${localMirrored ? 'scale-x-[-1]' : ''}`}
+                    className="w-full h-full object-cover"
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center gap-3 text-zinc-400">
@@ -269,7 +266,7 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
                     autoPlay
                     playsInline
                     muted
-                    className={`w-full h-full object-cover ${localMirrored ? 'scale-x-[-1]' : ''}`}
+                    className="w-full h-full object-cover"
                   />
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-800 text-zinc-300 text-xs">
@@ -316,7 +313,7 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
                   autoPlay
                   playsInline
                   muted
-                  className={`w-full h-full object-cover ${localMirrored ? 'scale-x-[-1]' : ''}`}
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center gap-2 text-zinc-400">
@@ -386,20 +383,6 @@ export const InteractionModeView: React.FC<InteractionModeViewProps> = ({
             {videoEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
           </button>
 
-          {/* Mirror / Flip Camera Toggle */}
-          <button
-            onClick={() => setLocalMirrored((prev) => !prev)}
-            className={`p-3 sm:p-3.5 rounded-full transition-all duration-200 cursor-pointer shadow-md ${
-              localMirrored
-                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
-                : 'bg-primary text-white'
-            }`}
-            title={localMirrored ? 'Mirror Camera is ON (Click to un-mirror)' : 'Mirror Camera is OFF'}
-            aria-label="Flip Camera"
-          >
-            <FlipHorizontal className="h-5 w-5" />
-          </button>
-
           {/* Host Exit Interaction Mode button */}
           {isHost && onSwitchTab && (
             <button
@@ -441,7 +424,6 @@ const PeerVideoPlayer: React.FC<{
   const [hasVideoTrack, setHasVideoTrack] = useState(() => {
     return stream?.getVideoTracks().some((t) => t.enabled && t.readyState === 'live') ?? false;
   });
-  const [isFlipped, setIsFlipped] = useState(false);
   const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
@@ -496,7 +478,7 @@ const PeerVideoPlayer: React.FC<{
           playsInline
           className={`w-full h-full object-cover transition-transform duration-200 ${showVideo ? 'block' : 'hidden'}`}
           style={{
-            transform: `${isFlipped ? 'scaleX(-1)' : ''} rotate(${rotation}deg)`.trim() || undefined,
+            transform: rotation ? `rotate(${rotation}deg)` : undefined,
           }}
         />
       )}
@@ -511,19 +493,9 @@ const PeerVideoPlayer: React.FC<{
         </div>
       )}
 
-      {/* Controls Overlay on hover (Flip & Rotate) for non-PIP */}
+      {/* Rotate controls for non-PIP video */}
       {!isPip && showVideo && (
         <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsFlipped((prev) => !prev);
-            }}
-            className="p-1.5 bg-black/60 hover:bg-black/90 rounded-full text-white backdrop-blur-md transition-colors"
-            title="Mirror remote video"
-          >
-            <FlipHorizontal className="h-3.5 w-3.5" />
-          </button>
           <button
             onClick={(e) => {
               e.stopPropagation();

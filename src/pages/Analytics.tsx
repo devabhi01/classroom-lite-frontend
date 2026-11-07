@@ -18,6 +18,7 @@ import {
   GraduationCap,
   PlusCircle,
   LogIn,
+  Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -79,6 +80,26 @@ export interface AnalyticsData {
   }>;
 }
 
+interface LiveClassroom {
+  id: string;
+  name: string;
+  code: string;
+  status: 'ACTIVE' | 'ENDED';
+  createdAt: string;
+  participantCount: number;
+  activeParticipantCount: number;
+}
+
+const formatDuration = (seconds: number) => {
+  const safeSeconds = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const remainingSeconds = safeSeconds % 60;
+  if (hours) return `${hours}h ${minutes}m`;
+  if (minutes) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
+};
+
 export const Analytics: React.FC = () => {
   const { user } = useAuth();
 
@@ -86,6 +107,9 @@ export const Analytics: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [liveClassrooms, setLiveClassrooms] = useState<LiveClassroom[]>([]);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+  const [clock, setClock] = useState(Date.now());
 
   // Robust teacher role detection:
   // 1. Profile explicitly says TEACHER or HOST
@@ -101,116 +125,128 @@ export const Analytics: React.FC = () => {
 
   const isStudent = !isTeacher;
 
-  const fetchAnalytics = async (showToast = false) => {
+  const fetchAnalytics = async (showToast = false, silent = false) => {
     try {
       if (showToast) setIsRefreshing(true);
-      else setIsLoading(true);
+      else if (!silent) setIsLoading(true);
 
-      const res = await api.get('/classrooms/analytics');
-      const payload: AnalyticsData = res.data?.data || res.data;
-      if (payload) {
-        setData(payload);
-        if (showToast) {
-          toast.success('Analytics updated with latest classroom sessions');
-        }
-      }
-    } catch (err: any) {
-      console.warn('Failed to fetch analytics from API, falling back to isolated local history:', err);
-      // Fallback: construct analytics strictly isolated by current user's role and identity
-      try {
-        const cacheKey = user?.id ? `tdp_recent_classrooms_${user.id}` : 'tdp_recent_classrooms';
-        const stored = localStorage.getItem(cacheKey) || localStorage.getItem('tdp_recent_classrooms');
-        let list: any[] = [];
-        if (stored) {
-          try {
-            list = JSON.parse(stored);
-          } catch {}
-        }
-        if (!Array.isArray(list)) list = [];
+      const teacherMode = user?.role === 'TEACHER' || user?.role === 'HOST';
+      const historyPath = teacherMode ? '/classrooms/history/teacher' : '/classrooms/history/student';
+      const [historyResponse, liveResponse] = await Promise.all([
+        api.get(historyPath),
+        api.get('/classrooms'),
+      ]);
+      const historyRows = historyResponse.data?.data || historyResponse.data || [];
+      const liveRows = liveResponse.data?.data || liveResponse.data || [];
+      const rows: any[] = Array.isArray(historyRows) ? historyRows : [];
+      const currentLive: LiveClassroom[] = (Array.isArray(liveRows) ? liveRows : [])
+        .filter((room: any) => room.status === 'ACTIVE')
+        .map((room: any) => ({
+          id: room.id,
+          name: room.name,
+          code: room.code,
+          status: room.status,
+          createdAt: room.createdAt,
+          participantCount: Number(room.participantCount || 0),
+          activeParticipantCount: Number(room.activeParticipantCount || 0),
+        }));
 
-        // Teacher: ONLY classrooms hosted by this user
-        const myHosted = list.filter((r: any) =>
-          (r.hostId && user?.id && String(r.hostId) === String(user.id)) ||
-          (r.hostEmail && user?.email && r.hostEmail === user.email) ||
-          (!r.hostId && !r.hostEmail && user?.role !== 'STUDENT')
+      if (teacherMode) {
+        const totalSeconds = rows.reduce((sum, room) => sum + Number(room.totalClassDurationSeconds || 0), 0);
+        const endedCount = rows.filter((room) => room.status === 'ENDED').length;
+        const students = rows.flatMap((room) =>
+          (room.participants || []).filter((participant: any) => participant.role === 'STUDENT' && ['ACCEPTED', 'LEFT'].includes(participant.status)),
         );
-        const totalHostSecs = myHosted.reduce((acc: number, r: any) => acc + (r.durationSeconds || 1800), 0);
-
-        // Student: ONLY classrooms attended by this user
-        const myAttended = list.filter((r: any) =>
-          user?.id ? String(r.hostId) !== String(user.id) : true
-        );
-        const totalAttendedSecs = myAttended.reduce((acc: number, r: any) => acc + (r.durationSeconds || 1800), 0);
-
-        const fallbackIsTeacher =
-          user?.role === 'TEACHER' ||
-          user?.role === 'HOST' ||
-          myHosted.length > 0;
-
+        const uniqueStudents = new Set(students.map((participant: any) => participant.userId));
+        const recentHostedSessions = rows.slice(0, 10).map((room) => ({
+          id: room.id,
+          name: room.name,
+          code: room.code,
+          status: room.status,
+          createdAt: room.createdAt,
+          endedAt: room.endedAt || null,
+          endedReason: room.endedReason || null,
+          durationSeconds: Number(room.totalClassDurationSeconds || 0),
+          durationFormatted: room.totalClassDurationFormatted || formatDuration(Number(room.totalClassDurationSeconds || 0)),
+          participantsCount: (room.participants || []).filter((participant: any) => participant.role === 'STUDENT' && ['ACCEPTED', 'LEFT'].includes(participant.status)).length,
+        }));
         setData({
-          role: fallbackIsTeacher ? 'TEACHER' : 'STUDENT',
+          role: 'TEACHER',
           teacherSummary: {
-            totalClassroomsHosted: myHosted.length,
-            activeClassroomsCount: myHosted.filter((r) => r.status === 'ACTIVE').length,
-            endedClassroomsCount: myHosted.filter((r) => r.status === 'ENDED').length,
-            totalTeachingDurationSeconds: totalHostSecs,
-            totalTeachingDurationFormatted:
-              totalHostSecs > 0
-                ? `${Math.round(totalHostSecs / 3600)}h ${Math.round((totalHostSecs % 3600) / 60)}m`
-                : '0s',
-            avgDurationSeconds: myHosted.length > 0 ? Math.round(totalHostSecs / myHosted.length) : 0,
-            avgDurationFormatted:
-              myHosted.length > 0 ? `${Math.round(totalHostSecs / myHosted.length / 60)}m` : '0s',
-            totalStudentsTaught: myHosted.length * 3,
-            uniqueStudentsCount: Math.min(10, myHosted.length * 2),
-            avgStudentsPerClass: myHosted.length > 0 ? 3.0 : 0,
+            totalClassroomsHosted: rows.length,
+            activeClassroomsCount: rows.filter((room) => room.status === 'ACTIVE').length,
+            endedClassroomsCount: endedCount,
+            totalTeachingDurationSeconds: totalSeconds,
+            totalTeachingDurationFormatted: formatDuration(totalSeconds),
+            avgDurationSeconds: rows.length ? Math.round(totalSeconds / rows.length) : 0,
+            avgDurationFormatted: formatDuration(rows.length ? Math.round(totalSeconds / rows.length) : 0),
+            totalStudentsTaught: students.length,
+            uniqueStudentsCount: uniqueStudents.size,
+            avgStudentsPerClass: rows.length ? Number((students.length / rows.length).toFixed(1)) : 0,
           },
-          studentSummary: {
-            totalClassesAttended: myAttended.length,
-            totalLearningDurationSeconds: totalAttendedSecs,
-            totalLearningDurationFormatted:
-              totalAttendedSecs > 0
-                ? `${Math.round(totalAttendedSecs / 3600)}h ${Math.round((totalAttendedSecs % 3600) / 60)}m`
-                : '0s',
-            avgAttendanceDurationSeconds: myAttended.length > 0 ? Math.round(totalAttendedSecs / myAttended.length) : 0,
-            avgAttendanceDurationFormatted:
-              myAttended.length > 0 ? `${Math.round(totalAttendedSecs / myAttended.length / 60)}m` : '0s',
-            uniqueInstructorsCount: Math.min(3, myAttended.length),
-          },
-          recentHostedSessions: myHosted.slice(0, 10).map((r: any) => ({
-            id: r.id || r._id,
-            name: r.name,
-            code: r.code,
-            status: r.status,
-            createdAt: r.createdAt || new Date().toISOString(),
-            endedAt: r.endedAt || null,
-            endedReason: r.endedReason || null,
-            durationSeconds: r.durationSeconds || 1800,
-            durationFormatted: '30m',
-            participantsCount: 3,
-          })),
-          recentAttendedSessions: myAttended.slice(0, 10).map((r: any) => ({
-            id: r.id || r._id,
-            name: r.name,
-            code: r.code,
-            status: r.status,
-            hostName: r.hostName || 'Instructor',
-            createdAt: r.createdAt || new Date().toISOString(),
-            joinedAt: r.createdAt || null,
-            leftAt: r.endedAt || null,
-            myDurationSeconds: r.durationSeconds || 1800,
-            myDurationFormatted: '30m',
-          })),
+          studentSummary: null,
+          recentHostedSessions,
+          recentAttendedSessions: [],
         });
-      } catch {}
+      } else {
+        const attendanceSeconds = (room: any) => {
+          const joinedAt = room.myAttendance?.joinedAt ? new Date(room.myAttendance.joinedAt).getTime() : 0;
+          const liveElapsed = room.status === 'ACTIVE' && joinedAt && !room.myAttendance?.leftAt
+            ? Math.floor((Date.now() - joinedAt) / 1000)
+            : 0;
+          return Number(room.myAttendance?.durationSeconds || 0) + Math.max(0, liveElapsed);
+        };
+        const totalSeconds = rows.reduce((sum, room) => sum + attendanceSeconds(room), 0);
+        const recentAttendedSessions = rows.slice(0, 10).map((room) => {
+          const seconds = attendanceSeconds(room);
+          return {
+            id: room.classroomId,
+            name: room.name,
+            code: room.code,
+            status: room.status,
+            hostName: room.host?.name || 'Instructor',
+            createdAt: room.createdAt,
+            joinedAt: room.myAttendance?.joinedAt || null,
+            leftAt: room.myAttendance?.leftAt || null,
+            myDurationSeconds: seconds,
+            myDurationFormatted: formatDuration(seconds),
+          };
+        });
+        setData({
+          role: 'STUDENT',
+          teacherSummary: null,
+          studentSummary: {
+            totalClassesAttended: rows.length,
+            totalLearningDurationSeconds: totalSeconds,
+            totalLearningDurationFormatted: formatDuration(totalSeconds),
+            avgAttendanceDurationSeconds: rows.length ? Math.round(totalSeconds / rows.length) : 0,
+            avgAttendanceDurationFormatted: formatDuration(rows.length ? Math.round(totalSeconds / rows.length) : 0),
+            uniqueInstructorsCount: new Set(rows.map((room) => room.host?.id).filter(Boolean)).size,
+          },
+          recentHostedSessions: [],
+          recentAttendedSessions,
+        });
+      }
+      setLiveClassrooms(currentLive);
+      setLastUpdatedAt(new Date());
+      if (showToast) toast.success('Analytics updated with live classroom data');
+    } catch (err: any) {
+      console.warn('Failed to fetch classroom analytics:', err);
+      if (showToast) toast.error('Could not refresh analytics. Check your connection and try again.');
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchAnalytics();
+    const refreshTimer = window.setInterval(() => fetchAnalytics(false, true), 15000);
+    const clockTimer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.clearInterval(clockTimer);
+    };
   }, [user?.role, user?.id]);
 
   const handleCopy = async (code: string) => {
@@ -304,6 +340,55 @@ export const Analytics: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {!isLoading && (
+        <Card className="border border-emerald-500/25 bg-emerald-500/[0.03] shadow-xs">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-4 w-4 text-emerald-600" />
+                Live classrooms
+                <span className="relative ml-1 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-50" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                </span>
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Refreshes every 15 seconds{lastUpdatedAt ? ` · Updated ${lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
+              </p>
+            </div>
+            <Badge variant="secondary" className="shrink-0">
+              {liveClassrooms.length} active
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            {liveClassrooms.length === 0 ? (
+              <p className="py-3 text-sm text-muted-foreground">No active classrooms right now.</p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {liveClassrooms.map((room) => (
+                  <div key={room.id} className="rounded-lg border border-border bg-card p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground" title={room.name}>{room.name}</p>
+                        <p className="font-mono text-[11px] text-muted-foreground">{room.code}</p>
+                      </div>
+                      <Badge className="shrink-0 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">LIVE</Badge>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5" />{room.activeParticipantCount} online</span>
+                      <span>{formatDuration((clock - new Date(room.createdAt).getTime()) / 1000)}</span>
+                    </div>
+                    <Link to={`/classroom/${room.code}`} className="mt-3 inline-flex text-xs font-medium text-primary hover:underline">
+                      {isTeacher ? 'Open classroom' : 'Re-enter classroom'} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center p-20 text-center">

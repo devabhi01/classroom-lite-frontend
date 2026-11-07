@@ -11,7 +11,6 @@ import {
   VideoOff,
   PhoneOff,
   Maximize2,
-  FlipHorizontal,
   RotateCw,
 } from 'lucide-react';
 import { Avatar } from '@/components/ui/Avatar';
@@ -24,17 +23,11 @@ const RemoteTile: React.FC<{
   remote: RemoteStream;
   onMaximize?: () => void;
   canMaximize: boolean;
-  globalFlippedH?: boolean;
-}> = ({ remote, onMaximize, canMaximize, globalFlippedH = false }) => {
+}> = ({ remote, onMaximize, canMaximize }) => {
   const [hasLiveVideo, setHasLiveVideo] = useState<boolean>(() => {
     return remote.stream?.getVideoTracks().some((t) => t.enabled && t.readyState === 'live') ?? false;
   });
-  const [isFlippedH, setIsFlippedH] = useState<boolean>(globalFlippedH);
   const [rotation, setRotation] = useState<number>(0);
-
-  useEffect(() => {
-    setIsFlippedH(globalFlippedH);
-  }, [globalFlippedH]);
 
   useEffect(() => {
     if (!remote.stream) return;
@@ -84,7 +77,7 @@ const RemoteTile: React.FC<{
         playsInline
         className={`w-full h-full object-cover transition-transform duration-200 ${showVideo ? 'block' : 'hidden'}`}
         style={{
-          transform: `${isFlippedH ? 'scaleX(-1)' : ''} rotate(${rotation}deg)`.trim() || undefined,
+          transform: rotation ? `rotate(${rotation}deg)` : undefined,
         }}
       />
 
@@ -98,18 +91,9 @@ const RemoteTile: React.FC<{
         </div>
       )}
 
-      {/* Action buttons overlay (Flip, Rotate, Maximize) */}
+      {/* Action buttons overlay (Rotate, Maximize) */}
       {showVideo && (
         <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-          <button
-            onClick={() => setIsFlippedH((prev) => !prev)}
-            className={`p-1 rounded backdrop-blur transition-colors ${
-              isFlippedH ? 'bg-primary text-primary-foreground shadow' : 'bg-black/70 hover:bg-black/90 text-white'
-            }`}
-            title={isFlippedH ? 'Mirrored (Click to revert)' : 'Flip horizontally (un-invert / mirror)'}
-          >
-            <FlipHorizontal className="h-3 w-3" />
-          </button>
           <button
             onClick={() => setRotation((r) => (r + 90) % 360)}
             className="p-1 bg-black/70 hover:bg-black/90 rounded text-white backdrop-blur transition-colors"
@@ -157,7 +141,6 @@ const LocalPreview: React.FC<{
   onMaximize,
   canMaximize,
 }) => {
-  const [isMirrored, setIsMirrored] = useState<boolean>(true);
   const [rotation, setRotation] = useState<number>(0);
   const showVideo = videoEnabled && !!stream;
 
@@ -175,7 +158,7 @@ const LocalPreview: React.FC<{
         muted
         className={`w-full h-full object-cover transition-transform duration-200 ${showVideo ? 'block' : 'hidden'}`}
         style={{
-          transform: `${isMirrored ? 'scaleX(-1)' : ''} rotate(${rotation}deg)`.trim() || undefined,
+          transform: rotation ? `rotate(${rotation}deg)` : undefined,
         }}
       />
 
@@ -190,15 +173,6 @@ const LocalPreview: React.FC<{
 
       {showVideo && (
         <div className="absolute top-1 right-1 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-          <button
-            onClick={() => setIsMirrored((prev) => !prev)}
-            className={`p-1 rounded backdrop-blur transition-colors ${
-              !isMirrored ? 'bg-primary text-primary-foreground shadow' : 'bg-black/70 hover:bg-black/90 text-white'
-            }`}
-            title={isMirrored ? 'Mirror preview is ON (Click to un-mirror)' : 'Mirror preview is OFF (Natural view)'}
-          >
-            <FlipHorizontal className="h-3 w-3" />
-          </button>
           <button
             onClick={() => setRotation((r) => (r + 90) % 360)}
             className="p-1 bg-black/70 hover:bg-black/90 rounded text-white backdrop-blur transition-colors"
@@ -269,9 +243,7 @@ export const ParticipantPanel: React.FC<ParticipantPanelProps> = ({
     name: string;
     isLocal: boolean;
   } | null>(null);
-  const [maximizedFlippedH, setMaximizedFlippedH] = useState<boolean>(false);
   const [maximizedRotation, setMaximizedRotation] = useState<number>(0);
-  const [allRemoteFlippedH, setAllRemoteFlippedH] = useState<boolean>(false);
 
   const hostCount = participants.filter((p) => p.role === 'HOST').length;
   const studentCount = participants.filter((p) => p.role === 'STUDENT').length;
@@ -291,20 +263,6 @@ export const ParticipantPanel: React.FC<ParticipantPanelProps> = ({
         </div>
 
         <div className="flex items-center space-x-1">
-          {/* Flip / Invert All Remote Feeds Button */}
-          <button
-            onClick={() => setAllRemoteFlippedH((prev) => !prev)}
-            className={`inline-flex items-center justify-center p-1 rounded transition-colors ${
-              allRemoteFlippedH
-                ? 'bg-primary/20 text-primary hover:bg-primary/30'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-            }`}
-            title={allRemoteFlippedH ? 'Revert remote video mirroring' : 'Flip horizontal / Un-invert all remote videos'}
-            aria-label="Flip remote videos"
-          >
-            <FlipHorizontal className="h-4 w-4" />
-          </button>
-
           {onToggleMinimize && (
             <button
               onClick={onToggleMinimize}
@@ -417,7 +375,6 @@ export const ParticipantPanel: React.FC<ParticipantPanelProps> = ({
                             name: p.name + ' (You)',
                             isLocal: true,
                           });
-                          setMaximizedFlippedH(true);
                           setMaximizedRotation(0);
                         }}
                       />
@@ -425,14 +382,12 @@ export const ParticipantPanel: React.FC<ParticipantPanelProps> = ({
                       <RemoteTile
                         remote={remoteState}
                         canMaximize={isCurrentUserHost}
-                        globalFlippedH={allRemoteFlippedH}
                         onMaximize={() => {
                           setMaximizedUser({
                             stream: remoteState.stream,
                             name: p.name,
                             isLocal: false,
                           });
-                          setMaximizedFlippedH(allRemoteFlippedH);
                           setMaximizedRotation(0);
                         }}
                       />
@@ -538,7 +493,7 @@ export const ParticipantPanel: React.FC<ParticipantPanelProps> = ({
                 muted={maximizedUser.isLocal}
                 className="w-full h-full object-contain transition-transform duration-200"
                 style={{
-                  transform: `${maximizedFlippedH ? 'scaleX(-1)' : ''} rotate(${maximizedRotation}deg)`.trim() || undefined,
+                  transform: maximizedRotation ? `rotate(${maximizedRotation}deg)` : undefined,
                 }}
                 ref={(node) => {
                   if (node && maximizedUser.stream && node.srcObject !== maximizedUser.stream) {
@@ -553,17 +508,6 @@ export const ParticipantPanel: React.FC<ParticipantPanelProps> = ({
 
             {/* Modal Controls */}
             <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
-              <button
-                onClick={() => setMaximizedFlippedH((prev) => !prev)}
-                className={`p-2 rounded-full backdrop-blur transition-colors ${
-                  maximizedFlippedH
-                    ? 'bg-primary text-primary-foreground shadow'
-                    : 'bg-black/60 hover:bg-black/80 text-white'
-                }`}
-                title={maximizedFlippedH ? 'Mirrored (Click to revert)' : 'Flip horizontal: Un-invert / Mirror'}
-              >
-                <FlipHorizontal className="h-5 w-5" />
-              </button>
               <button
                 onClick={() => setMaximizedRotation((r) => (r + 90) % 360)}
                 className="p-2 bg-black/60 hover:bg-black/80 rounded-full text-white backdrop-blur transition-colors"

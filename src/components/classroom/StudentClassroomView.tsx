@@ -15,7 +15,6 @@ import {
   Edit3,
   FileText,
   Monitor,
-  FlipHorizontal,
   ChevronDown,
   ChevronUp,
   Crown,
@@ -83,7 +82,6 @@ export const StudentClassroomView: React.FC<StudentClassroomViewProps> = ({
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [participantsDrawerOpen, setParticipantsDrawerOpen] = useState(false);
   const [isTeacherPipMinimized, setIsTeacherPipMinimized] = useState(false);
-  const [localMirrored, setLocalMirrored] = useState(true);
 
   // Initialize and tick session duration timer
   useEffect(() => {
@@ -289,6 +287,7 @@ export const StudentClassroomView: React.FC<StudentClassroomViewProps> = ({
                   }}
                   autoPlay
                   playsInline
+                  muted
                   className="w-full h-full object-cover"
                 />
 
@@ -339,19 +338,6 @@ export const StudentClassroomView: React.FC<StudentClassroomViewProps> = ({
                 title={videoEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
               >
                 {videoEnabled ? <Video className="h-4 w-4 sm:h-5 sm:w-5" /> : <VideoOff className="h-4 w-4 sm:h-5 sm:w-5" />}
-              </button>
-
-              {/* Flip / Mirror Camera */}
-              <button
-                onClick={() => setLocalMirrored((prev) => !prev)}
-                className={`p-2.5 sm:p-3 rounded-full transition-all cursor-pointer shadow-sm ${
-                  localMirrored
-                    ? 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                    : 'bg-primary text-primary-foreground'
-                }`}
-                title="Mirror Camera"
-              >
-                <FlipHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
 
               {/* Participants Drawer Button */}
